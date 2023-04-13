@@ -1,0 +1,49 @@
+#!/bin/bash
+
+source /etc/profile
+source /etc/jelastic/metainf.conf 
+
+CERT_DIR="/var/lib/jelastic/keys/SSL-TLS";
+[ -d "$CERT_DIR" ] || mkdir -p "$CERT_DIR";
+
+[ -z "$KEY_COUNTRY" ] && export KEY_COUNTRY="CH"
+[ -z "$KEY_PROVINCE" ] && export KEY_PROVINCE="8200"
+[ -z "$KEY_CITY" ] && export KEY_CITY="Schaffhausen";
+[ -z "$KEY_ORG" ] && export KEY_ORG="Virtuozzo International GmbH";
+[ -z "$KEY_EMAIL" ] && export KEY_EMAIL="me@myhost.mydomain"
+[ -z "$KEY_OU" ] && export KEY_OU="MyOrganizationalUnit"
+[ -z "$KEY_SIZE" ] && export KEY_SIZE=2048
+[ -z "$KEY_HOST" ] && export KEY_HOST=$(hostname)
+[ -z "$KEY_EXPIRE" ] && export KEY_EXPIRE=3650
+[ -n "${1}"] && export PG_USER="${1}"
+[ -z "$PG_USER" ] && export PG_USER="webadmin"
+
+#generating server key, cert and root cert
+if [ ! -f ${CERT_DIR}/server.crt ]; then
+    openssl genrsa -out ${CERT_DIR}/server.key ${KEY_SIZE}
+    chmod 400 ${CERT_DIR}/server.key
+    chown postgres:postgres ${CERT_DIR}/server.key
+    openssl req -new -key ${CERT_DIR}/server.key -days ${KEY_EXPIRE} -out ${CERT_DIR}/server.crt -x509 -subj "/C=$KEY_COUNTRY/ST=$KEY_PROVINCE/L=$KEY_CITY/O=$KEY_ORG/CN=$KEY_HOST";
+    cp ${CERT_DIR}/server.crt ${CERT_DIR}/root.crt
+fi
+
+if [ "x${COMPUTE_TYPE}" == "xpostgres" ]; then
+    #generating client certs
+    if [ "x${PG_USER}" == "xwebadmin" ]; then
+        CLIENT_CERT_NAME="client"
+    else
+        CLIENT_CERT_NAME="${PG_USER}"
+    fi
+
+    if [ ! -f ${CERT_DIR}/${CLIENT_CERT_NAME}.crt ]; then
+        openssl genrsa -out ${CERT_DIR}/${CLIENT_CERT_NAME}.key ${KEY_SIZE}
+        openssl req -new -key ${CERT_DIR}/${CLIENT_CERT_NAME}.key -out ${CERT_DIR}/${CLIENT_CERT_NAME}.csr -subj "/C=$KEY_COUNTRY/ST=$KEY_PROVINCE/L=$KEY_CITY/O=$KEY_ORG/CN=$PG_USER"
+        #signing the client cert
+        openssl x509 -req -in ${CERT_DIR}/${CLIENT_CERT_NAME}.csr -CA ${CERT_DIR}/root.crt -CAkey ${CERT_DIR}/server.key -out ${CERT_DIR}/${CLIENT_CERT_NAME}.crt -CAcreateserial
+    fi
+
+fi
+
+#fixing owherships
+chmod 600 /var/lib/jelastic/keys/SSL-TLS/*
+chown -R postgres:postgres /var/lib/jelastic/keys/SSL-TLS/* /var/lib/jelastic/keys/SSL-TLS 

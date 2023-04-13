@@ -1,0 +1,34 @@
+type: install
+jpsVersion: 6.1.1
+name: SSL/TLS Encrypted Connection for Postgres
+id: postgres-ssl
+targetEditions: any
+logo: /images/postgres-ssl-logo.svg
+description: Enforce DB Connection to use SSL/TLS in Postgres cluster/standalone. Certificate folder /var/lib/jelastic/keys/SSL-TLS.
+baseUrl: https://raw.githubusercontent.com/jelastic-jps/postgres-ssl-addon/main
+
+settings:
+  fields:
+    - type: list
+      name: envName
+      caption: Environment
+      required: true
+      values: []
+
+    - type: list
+      name: nodeGroups
+      caption: Node Group(s)
+      required: true
+      multiSelect: true
+      dependsOn:
+        envName: {}
+
+onBeforeInit: scripts/onBeforeInit.js
+
+onInstall:
+  - install [${settings.nodeGroups}]:
+      envName: ${settings.envName}
+      jps: logic.jps?_r=${fn.random}
+      settings:
+        nodeGroups: ${settings.nodeGroups}
+        envName: ${settings.envName}
