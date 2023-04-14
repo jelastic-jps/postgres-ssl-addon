@@ -32,3 +32,8 @@ onInstall:
       settings:
         nodeGroups: ${settings.nodeGroups}
         envName: ${settings.envName}
+        
+success:
+  email: false
+  text: |
+    Your SSL/TLS Encrypted Connection for Postgres application has been successfully deployed to ${settings.envName} (target layers: ${settings.nodeGroups}).
