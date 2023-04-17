@@ -1,257 +1,39 @@
-type: update
+type: install
 jpsVersion: 6.1.1
-name: SSL/TLS Encrypted Connection
-id: postgres-ssl-logic
+name: SSL/TLS Encrypted Connection for Postgres
+id: postgres-ssl
 targetEditions: any
 logo: /images/postgres-ssl-logo.svg
-description: Enforce DB Connection to use SSL/TLS. Certificate folder /var/lib/jelastic/keys/SSL-TLS
+description: Enforce DB Connection to use SSL/TLS in Postgres cluster/standalone. Certificate folder /var/lib/jelastic/keys/SSL-TLS.
 baseUrl: https://raw.githubusercontent.com/jelastic-jps/postgres-ssl-addon/main
 
-targetNodes:
-  nodeType:
-    - postgresql
-    - postgres11
-    - postgres12
-    - postgres13
-    - postgres14
-    - postgres15
-    - pgpool2
-    - pgpool2-4
+settings:
+  fields:
+    - type: list
+      name: envName
+      caption: Environment
+      required: true
+      values: []
 
-globals:
-  pgConfig: /var/lib/pgsql/data/postgresql.conf
-  pgHbaConfig: /var/lib/pgsql/data/pg_hba.conf
-  pgpoolConfig: /etc/pgpool-II/pgpool.conf
+    - type: list
+      name: nodeGroups
+      caption: Node Group(s)
+      required: true
+      multiSelect: true
+      dependsOn:
+        envName: {}
+
+onBeforeInit: scripts/onBeforeInit.js
 
 onInstall:
-  - checkApplication
-  - turnOnSSLForNodes:
-      nodesToEnableSSL: ${targetNodes.nodeGroup}
-
-onUninstall:
-  - disableSSL
-
-onAfterRedeployContainer[${targetNodes.nodeGroup}]:
-  - if (!${event.params.useExistingVolumes:true}):
-     - turnOnSSLForNodes:
-         nodesToEnableSSL: ${targetNodes.nodeGroup}
-  
-onBeforeServiceScaleOut[${targetNodes.nodeGroup}]:
-  - if ('${event.params.nodeGroup}'.indexOf('sqldb') > -1):
-    - cmd[${targetNodes.nodeGroup}]: |-
-        sed -ci -e 's/^[[:space:]]*ssl[[:space:]]*=[[:space:]]*on/ssl = off/' ${globals.pgConfig}
-      
-onAfterServiceScaleOut[${targetNodes.nodeGroup}]:
-  - addCertsForNewNodes
-  - if ('${event.params.nodeGroup}'.indexOf('sqldb') > -1):
-    - cmd[${targetNodes.nodeGroup}]: |-
-        sed -ci -e "s/^ssl = off/ssl = on/" ${globals.pgConfig}
-  - fixCertOwnPerm
-  - if ('${event.params.nodeGroup}'.indexOf('sqldb') > -1):
-    - cmd[${targetNodes.nodeGroup}]: jem service restart
-
-onAfterResetServicePassword[${targetNodes.nodeGroup}]:
-  - if ('${event.params.nodeGroup}'.indexOf('sqldb') > -1):
-    - if (nodes.pgpool):
-      - getPswd
-      - setWebadminPasswordOnPgPool
-
-onAfterClone:
-  - script: return {result:0, jps:MANIFEST};
   - install [${settings.nodeGroups}]:
-      envName: ${event.response.env.envName}
-      jps: ${response.jps}
+      envName: ${settings.envName}
+      jps: logic.jps?_r=${fn.random}
       settings:
         nodeGroups: ${settings.nodeGroups}
         envName: ${settings.envName}
-
-buttons:
-  - confirmText: Do you want to reissue the SSL certificates and key (service restart needed)?
-    loadingText: Reissuing the certificates...
-    action: reGenerateCerts
-    caption: Re-issue certificates
-    successText: Certificates reissued successfully
-  - loadingText: Opening...
-    action: opendocs
-    caption: Configuration Tutorial
-    href: https://www.virtuozzo.com/application-platform-docs/ssl-for-pgsql/
-
-actions:
-  reGenerateCerts:
-    - cmd[${targetNodes.nodeGroup}]: rm -rf /var/lib/jelastic/keys/SSL-TLS/*;
-    - generateCerts:
-        affectedNodes: ${targetNodes.nodeGroup}
-    - cmd[${targetNodes.nodeGroup}]: jem service restart
-    - fixCertOwnPerm
-
-  checkApplication:
-    - if ('${targetNodes.nodeGroup}'.indexOf('sqldb') > -1):
-      - checkAppVersion:
-          masternode: ${targetNodes.nodeGroup}
-      - if (response.out == "Non-supported"):
-        - stopEvent:
-            type: warning
-            message: Database version is not supported.
-
-  generateCerts:
-    - cmd[${this.affectedNodes}]: |-
-        [ -f /usr/local/sbin/selfcertgen ] && rm -f /usr/local/sbin/selfcertgen;
-        wget -O /usr/local/sbin/selfcertgen ${baseUrl}/scripts/selfcertgen?_r=${fn.random};
-        chmod +x /usr/local/sbin/selfcertgen
-        selfcertgen;
-        chown -R postgres:postgres /var/lib/jelastic/keys/SSL-TLS /usr/local/sbin/selfcertgen; chmod 600 /var/lib/jelastic/keys/SSL-TLS/*
-      user: root
-    - cmd[${this.affectedNodes}]: |-
-        rm -rf /var/lib/jelastic/keys/SSL-TLS/client; mkdir -p /var/lib/jelastic/keys/SSL-TLS/client;
-        rm -rf /var/lib/jelastic/keys/SSL-TLS/server; mkdir -p /var/lib/jelastic/keys/SSL-TLS/server;
-        chown -R postgres:postgres /var/lib/jelastic/keys/SSL-TLS/*
-        rm -f /var/lib/jelastic/keys/SSL-TLS/client.csr
-        for i in client.crt client.key
-        do
-            [ -f /var/lib/jelastic/keys/SSL-TLS/${i} ] && mv -f /var/lib/jelastic/keys/SSL-TLS/${i} /var/lib/jelastic/keys/SSL-TLS/client/${i}
-        done
-        for i in root.crt root.srl server.crt server.key
-        do
-            [ -f /var/lib/jelastic/keys/SSL-TLS/${i} ] && mv -f /var/lib/jelastic/keys/SSL-TLS/${i} /var/lib/jelastic/keys/SSL-TLS/server/${i}
-        done
-        ln -sfT /var/lib/jelastic/keys/SSL-TLS/server/root.crt /var/lib/jelastic/keys/SSL-TLS/client/root.crt
-      user: root
-      
-  getPswd:
-    - if ('${targetNodes.nodeGroup}'.indexOf('sqldb') > -1):
-      - getPostgresPasswd:
-          masternode: ${targetNodes.nodeGroup}
-      - setGlobals: 
-          pswd: ${response.out}
-
-  setWebadminPasswordOnPgPool:
-    - if (nodes.pgpool):
-      - cmd[pgpool]: |-
-          [ -f ~/.pgpoolkey ] || echo 'defaultpgpoolkey' > ~/.pgpoolkey; chmod 600 ~/.pgpoolkey
-          pg_enc -m -f /etc/pgpool-II/pgpool.conf -u webadmin ${globals.pswd}
-
-  enableSSL:
-    - if ('${targetNodes.nodeGroup}'.indexOf('sqldb') > -1):
-      - if (nodes.pgpool):
-        - getPswd
-        - setWebadminPasswordOnPgPool
-    - cmd[${this.affectedNodes}]: |-
-        echo "/var/lib/jelastic/keys/SSL-TLS" >> /etc/jelastic/redeploy.conf
-        source /etc/jelastic/metainf.conf
-        if [ "x$COMPUTE_TYPE" == "xpostgres" ] ; then
-            if ! grep -q 'scram-sha-256' /var/lib/jelastic/overrides/postgres-passwd.lib; then
-                wget ${baseUrl}/scripts/postgres-passwd.lib -O /var/lib/jelastic/overrides/postgres-passwd.lib
-                if [ -f /usr/local/sbin/jcm ]; then 
-                    jem passwd set -p ${globals.pswd}
-                else 
-                    true
-                fi
-            fi
-            if [ -e ${globals.pgConfig} ]; then
-                for i in ssl ssl_ciphers ssl_cert_file ssl_ca_file ssl_key_file ssl_prefer_server_ciphers
-                do
-                    sed -ci -e "s/^[[:space:]]*#[[:space:]]*${i}[[:space:]]*=/${i} =/" ${globals.pgConfig}
-                done
-                if grep -q '^ssl_cert_file' ${globals.pgConfig}; then 
-                    sed -ci -e "s|ssl_cert_file.*|ssl_cert_file = '/var/lib/jelastic/keys/SSL-TLS/server/server.crt'|" ${globals.pgConfig};
-                else 
-                    echo "ssl_cert_file = '/var/lib/jelastic/keys/SSL-TLS/server/server.crt'" >> ${globals.pgConfig};
-                fi
-                if grep -q '^ssl_ca_file' ${globals.pgConfig}; then 
-                    sed -ci -e "s|ssl_ca_file.*|ssl_ca_file = '/var/lib/jelastic/keys/SSL-TLS/server/root.crt'|" ${globals.pgConfig};             
-                else 
-                    echo "ssl_ca_file = '/var/lib/jelastic/keys/SSL-TLS/server/root.crt'" >> ${globals.pgConfig};
-                fi
-                if grep -q '^ssl_key_file' ${globals.pgConfig}; then
-                    sed -ci -e "s|ssl_key_file.*|ssl_key_file = '/var/lib/jelastic/keys/SSL-TLS/server/server.key'|" ${globals.pgConfig};
-                else 
-                    echo "ssl_key_file = '/var/lib/jelastic/keys/SSL-TLS/server/server.key'" >> ${globals.pgConfig};
-                fi
-                for i in ssl ssl_prefer_server_cipher
-                do
-                    sed -ci -e "s/^${i} = off/${i} = on/" ${globals.pgConfig} 
-                done
-            fi
-            sed -ci -e "s/host[[:space:]]*all[[:space:]]*all[[:space:]]*0.0.0.0\/0[[:space:]]*\(md5\|scram-sha-256\)[[:space:]]*/hostssl    all    all    0.0.0.0\/0    scram-sha-256/" ${globals.pgHbaConfig}
-        else
-            sed -ci -e "s/^[[:space:]]*#[[:space:]]*ssl[[:space:]]*=.*/ssl = on/" ${globals.pgpoolConfig}
-            sed -ci -e "s/^[[:space:]]*ssl[[:space:]]*=.*/ssl = on/" ${globals.pgpoolConfig}
-            sed -ci -e "s/^[[:space:]]*#[[:space:]]*enable_pool_hba[[:space:]]*=.*/enable_pool_hba = on/" ${globals.pgpoolConfig}
-            sed -ci -e "s/^[[:space:]]*enable_pool_hba[[:space:]]*=.*/enable_pool_hba = on/" ${globals.pgpoolConfig}
-            sed -ci -e "s/^[[:space:]]*#[[:space:]]*pool_passwd[[:space:]]*=/pool_passwd  =/" ${globals.pgpoolConfig}
-            sed -ci -e "s|^[[:space:]]*#[[:space:]]*ssl_key[[:space:]]*=.*|ssl_key = '/var/lib/jelastic/keys/SSL-TLS/server/server.key'|" ${globals.pgpoolConfig}
-            sed -ci -e "s|^[[:space:]]*#[[:space:]]*ssl_cert[[:space:]]*=.*|ssl_cert = '/var/lib/jelastic/keys/SSL-TLS/server/server.crt'|" ${globals.pgpoolConfig}
-            sed -ci -e "s/^[[:space:]]*host[[:space:]]*all[[:space:]]*all[[:space:]]*0.0.0.0\/0[[:space:]]*\(md5\|scram-sha-256\)[[:space:]]*/hostssl    all    all    0.0.0.0\/0    scram-sha-256/" /etc/pgpool-II/pool_hba.conf
-        fi
-        jem service restart
-  
-  disableSSL:
-    - cmd[${targetNodes.nodeGroup}]: |-
-        jem service stop
-        if [ -e ${globals.pgConfig} ]; then
-            sed -ci -e 's/^[[:space:]]*ssl[[:space:]]*=[[:space:]]*on/ssl = off/' ${globals.pgConfig}
-        fi
-        if [ -e ${globals.pgHbaConfig} ]; then
-            sed -ci -e "s|hostssl|host|" ${globals.pgHbaConfig}
-        fi
-        if [ -e ${globals.pgpoolConfig} ]; then
-            sed -ci -e "s/^[[:space:]]*ssl[[:space:]]*=.*/ssl = off/" ${globals.pgpoolConfig}
-            sed -ci -e "s/^[[:space:]]*enable_pool_hba[[:space:]]*=.*/enable_pool_hba = off/" ${globals.pgpoolConfig}
-            sed -ci -e "s/^[[:space:]]*pool_passwd[[:space:]]*=/#pool_passwd  =/" ${globals.pgpoolConfig}
-            sed -ci -e "s|^[[:space:]]*ssl_key[[:space:]]*=|#ssl_key =|" ${globals.pgpoolConfig}
-            sed -ci -e "s|^[[:space:]]*ssl_cert[[:space:]]*=|#ssl_cert =|" ${globals.pgpoolConfig}
-            sed -ci -e "s|hostssl|host|" ${globals.pgpoolConfig}
-        fi
-        for i in client.crt client.key root.crt
-        do
-            rm -f /var/lib/jelastic/keys/SSL-TLS/client/${i}
-        done
-        for i in root.crt root.srl server.crt server.key
-        do
-            rm -f /var/lib/jelastic/keys/SSL-TLS/server/${i}
-        done
-        sed -ci -e '/\/var\/lib\/jelastic\/keys\/SSL-TLS/d' /etc/jelastic/redeploy.conf
-        for i in client server
-        do
-            if [ -z "$(ls -A /var/lib/jelastic/keys/SSL-TLS/${i})" ]; then
-                rm -rf /var/lib/jelastic/keys/SSL-TLS/${i}
-            fi
-        done
-        jem service start
-      user: root
-
-  addCertsForNewNodes:
-    - turnOnSSLForNodes:
-        nodesToEnableSSL: ${event.response.nodes.join(id,)}
-
-  checkAppVersion:
-    - cmd[${this.masternode}]: |-
-        source /etc/jelastic/metainf.conf
-        if [ "x$COMPUTE_TYPE" == "xpostgres" ] ; then
-            [ -f /root/check_app.sh ] && rm -f /root/check_app.sh;
-            wget -O /root/check_app.sh ${baseUrl}/scripts/check_app.sh?_r=${fn.random};
-            bash /root/check_app.sh;
-        fi
-      user: root
-      
-  getPostgresPasswd:
-    - cmd[${this.masternode}]: |-
-        source /etc/jelastic/metainf.conf
-        if [ "x$COMPUTE_TYPE" == "xpostgres" ] ; then
-            if [ -f /usr/local/sbin/jcm ]; then
-                jcm getPswd
-            else
-                true
-            fi
-        fi
-
-  fixCertOwnPerm:
-    - cmd[${targetNodes.nodeGroup}]: |-
-        chown -R postgres:postgres /var/lib/jelastic/keys/SSL-TLS
-      user: root
         
-  turnOnSSLForNodes:
-    - generateCerts: 
-        affectedNodes: ${this.nodesToEnableSSL}
-    - enableSSL:
-        affectedNodes: ${this.nodesToEnableSSL}
+success:
+  email: false
+  text: |
+    Your SSL/TLS Encrypted Connection for Postgres application has been successfully deployed to ${settings.envName} (target layers: ${settings.nodeGroups}).
