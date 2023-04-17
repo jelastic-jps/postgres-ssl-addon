@@ -24,29 +24,37 @@ globals:
   pgpoolConfig: /etc/pgpool-II/pgpool.conf
 
 onInstall:
-  - generateCerts: 
-      affectedNodes: ${targetNodes.nodeGroup}
-  - enableSSL:
-      affectedNodes: ${targetNodes.nodeGroup}
+  - checkApplication
+  - turnOnSSLForNodes:
+      nodesToEnableSSL: ${targetNodes.nodeGroup}
 
 onUninstall:
   - disableSSL
 
-onAfterRedeployContainer [target]:
-  - generateCerts: 
-      affectedNodes: ${event.response.nodes.join(id,)}
-  - enableSSL: 
-      affectedNodes: ${event.response.nodes.join(id,)}
+onAfterRedeployContainer[${targetNodes.nodeGroup}]:
+  - if (!${event.params.useExistingVolumes:true}):
+     - turnOnSSLForNodes:
+         nodesToEnableSSL: ${targetNodes.nodeGroup}
+  
+onBeforeServiceScaleOut[${targetNodes.nodeGroup}]:
+  - if ('${event.params.nodeGroup}'.indexOf('sqldb') > -1):
+    - cmd[${targetNodes.nodeGroup}]: |-
+        sed -ci -e 's/^[[:space:]]*ssl[[:space:]]*=[[:space:]]*on/ssl = off/' ${globals.pgConfig}
+      
+onAfterServiceScaleOut[${targetNodes.nodeGroup}]:
+  - addCertsForNewNodes
+  - if ('${event.params.nodeGroup}'.indexOf('sqldb') > -1):
+    - cmd[${targetNodes.nodeGroup}]: |-
+        sed -ci -e "s/^ssl = off/ssl = on/" ${globals.pgConfig}
+  - fixCertOwnPerm
+  - if ('${event.params.nodeGroup}'.indexOf('sqldb') > -1):
+    - cmd[${targetNodes.nodeGroup}]: jem service restart
 
-onAfterScaleOut [target]:
-  - generateCerts: 
-      affectedNodes: ${event.response.nodes.join(id,)}
-  - enableSSL: 
-      affectedNodes: ${event.response.nodes.join(id,)}
-
-onAfterResetServicePassword[sqldb]:
-  - getPswd
-  - setWebadminPasswordOnPgPool
+onAfterResetServicePassword[${targetNodes.nodeGroup}]:
+  - if ('${event.params.nodeGroup}'.indexOf('sqldb') > -1):
+    - if (nodes.pgpool):
+      - getPswd
+      - setWebadminPasswordOnPgPool
 
 onAfterClone:
   - script: return {result:0, jps:MANIFEST};
@@ -74,17 +82,16 @@ actions:
     - generateCerts:
         affectedNodes: ${targetNodes.nodeGroup}
     - cmd[${targetNodes.nodeGroup}]: jem service restart
+    - fixCertOwnPerm
 
   checkApplication:
-    - cmd[${nodes.sqldb.master.id}]: |-
-        [ -f /root/check_app.sh ] && rm -f /root/check_app.sh;
-        wget -O /root/check_app.sh ${baseUrl}/scripts/check_app.sh?_r=${fn.random};
-        bash /root/check_app.sh;
-      user: root
-    - if (response.out == "Non-supported"):
-      - stopEvent:
-          type: warning
-          message: Database version is not supported.
+    - if ('${targetNodes.nodeGroup}'.indexOf('sqldb') > -1):
+      - checkAppVersion:
+          masternode: ${targetNodes.nodeGroup}
+      - if (response.out == "Non-supported"):
+        - stopEvent:
+            type: warning
+            message: Database version is not supported.
 
   generateCerts:
     - cmd[${this.affectedNodes}]: |-
@@ -92,11 +99,11 @@ actions:
         wget -O /usr/local/sbin/selfcertgen ${baseUrl}/scripts/selfcertgen?_r=${fn.random};
         chmod +x /usr/local/sbin/selfcertgen
         selfcertgen;
-        chown 700:700 /var/lib/jelastic/keys/SSL-TLS/* /usr/local/sbin/selfcertgen; chmod 600 /var/lib/jelastic/keys/SSL-TLS/*
+        chown -R postgres:postgres /var/lib/jelastic/keys/SSL-TLS /usr/local/sbin/selfcertgen; chmod 600 /var/lib/jelastic/keys/SSL-TLS/*
       user: root
     - cmd[${this.affectedNodes}]: |-
-        [ -d "/var/lib/jelastic/keys/SSL-TLS/client" ] || mkdir -p "/var/lib/jelastic/keys/SSL-TLS/client";
-        [ -d "/var/lib/jelastic/keys/SSL-TLS/server" ] || mkdir -p "/var/lib/jelastic/keys/SSL-TLS/server";
+        rm -rf /var/lib/jelastic/keys/SSL-TLS/client; mkdir -p /var/lib/jelastic/keys/SSL-TLS/client;
+        rm -rf /var/lib/jelastic/keys/SSL-TLS/server; mkdir -p /var/lib/jelastic/keys/SSL-TLS/server;
         chown -R postgres:postgres /var/lib/jelastic/keys/SSL-TLS/*
         rm -f /var/lib/jelastic/keys/SSL-TLS/client.csr
         for i in client.crt client.key
@@ -111,14 +118,11 @@ actions:
       user: root
       
   getPswd:
-    - cmd[${nodes.sqldb.master.id}]: |-
-        if [ -f /usr/local/sbin/jcm ]; then
-            jcm getPswd
-        else
-            true
-        fi
-    - setGlobals: 
-        pswd: ${response.out}
+    - if ('${targetNodes.nodeGroup}'.indexOf('sqldb') > -1):
+      - getPostgresPasswd:
+          masternode: ${targetNodes.nodeGroup}
+      - setGlobals: 
+          pswd: ${response.out}
 
   setWebadminPasswordOnPgPool:
     - if (nodes.pgpool):
@@ -127,8 +131,10 @@ actions:
           pg_enc -m -f /etc/pgpool-II/pgpool.conf -u webadmin ${globals.pswd}
 
   enableSSL:
-    - getPswd
-    - setWebadminPasswordOnPgPool
+    - if ('${targetNodes.nodeGroup}'.indexOf('sqldb') > -1):
+      - if (nodes.pgpool):
+        - getPswd
+        - setWebadminPasswordOnPgPool
     - cmd[${this.affectedNodes}]: |-
         echo "/var/lib/jelastic/keys/SSL-TLS" >> /etc/jelastic/redeploy.conf
         source /etc/jelastic/metainf.conf
@@ -213,3 +219,39 @@ actions:
         done
         jem service start
       user: root
+
+  addCertsForNewNodes:
+    - turnOnSSLForNodes:
+        nodesToEnableSSL: ${event.response.nodes.join(id,)}
+
+  checkAppVersion:
+    - cmd[${this.masternode}]: |-
+        source /etc/jelastic/metainf.conf
+        if [ "x$COMPUTE_TYPE" == "xpostgres" ] ; then
+            [ -f /root/check_app.sh ] && rm -f /root/check_app.sh;
+            wget -O /root/check_app.sh ${baseUrl}/scripts/check_app.sh?_r=${fn.random};
+            bash /root/check_app.sh;
+        fi
+      user: root
+      
+  getPostgresPasswd:
+    - cmd[${this.masternode}]: |-
+        source /etc/jelastic/metainf.conf
+        if [ "x$COMPUTE_TYPE" == "xpostgres" ] ; then
+            if [ -f /usr/local/sbin/jcm ]; then
+                jcm getPswd
+            else
+                true
+            fi
+        fi
+
+  fixCertOwnPerm:
+    - cmd[${targetNodes.nodeGroup}]: |-
+        chown -R postgres:postgres /var/lib/jelastic/keys/SSL-TLS
+      user: root
+        
+  turnOnSSLForNodes:
+    - generateCerts: 
+        affectedNodes: ${this.nodesToEnableSSL}
+    - enableSSL:
+        affectedNodes: ${this.nodesToEnableSSL}
