@@ -128,7 +128,7 @@ function setPassword() {
         fi
 
         stopService ${SERVICE} >> $LOG_FILE 2>&1
-        $SED -i '/local/s/trust/scram-sha-256/' $POSTGRES_CONF
+        $SED -i '/local/s/trust/md5/' $POSTGRES_CONF
         startService ${SERVICE} >> $LOG_FILE 2>&1
 }
 
