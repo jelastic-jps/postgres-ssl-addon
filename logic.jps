@@ -132,8 +132,8 @@ actions:
 
   enableSSL:
     - if ('${targetNodes.nodeGroup}'.indexOf('sqldb') > -1):
+      - getPswd
       - if (nodes.pgpool):
-        - getPswd
         - setWebadminPasswordOnPgPool
     - cmd[${this.affectedNodes}]: |-
         echo "/var/lib/jelastic/keys/SSL-TLS" >> /etc/jelastic/redeploy.conf
