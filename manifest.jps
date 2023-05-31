@@ -4,6 +4,8 @@ name: SSL/TLS Encrypted Connection for Postgres
 id: postgres-ssl
 targetEditions: any
 logo: /images/postgres-ssl-logo.svg
+categories:
+  - apps/dev-and-admin-tools
 description: Enforce DB Connection to use SSL/TLS in Postgres cluster/standalone. Certificate folder /var/lib/jelastic/keys/SSL-TLS.
 baseUrl: https://raw.githubusercontent.com/jelastic-jps/postgres-ssl-addon/main
 
