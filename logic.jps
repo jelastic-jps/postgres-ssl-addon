@@ -1,7 +1,7 @@
 type: update
 jpsVersion: 6.1.1
 name: SSL/TLS Encrypted Connection
-id: postgres-ssl-logic
+id: postgres-ssl
 targetEditions: any
 logo: /images/postgres-ssl-logo.svg
 description: Enforce DB Connection to use SSL/TLS. Certificate folder /var/lib/jelastic/keys/SSL-TLS
