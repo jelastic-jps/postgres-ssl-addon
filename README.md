@@ -13,7 +13,7 @@ The add-on can be installed on top of the **PostgreSQL** and **Pgpool** (for dat
 1\. Log into your Virtuozzo Application Platform and [import](https://www.virtuozzo.com/application-platform-docs/environment-import/) the add-on's manifest from this repository:
 
 ```
-https://github.com/jelastic-jps/postgres-ssl-addon/blob/main/manifest.jps
+https://github.com/DmytroZubelevych/postgres-ssl-addon-1/blob/main/manifest.jps
 ```
 
 ![import add-on](images/01-import-addon.png)
