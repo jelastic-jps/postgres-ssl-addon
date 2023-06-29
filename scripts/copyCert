@@ -1,0 +1,20 @@
+#!/bin/bash
+
+source /.jelenv
+
+getCert(){
+    cat ${1} | openssl enc -base64 -e -aes-256-cbc -salt -pass pass:${KEY_PASS}
+}
+
+uploadCert(){
+    echo -e "${2}" | openssl enc -base64 -d -aes-256-cbc -salt -pass pass:${KEY_PASS} > ${1} && echo OK
+}
+
+case ${1} in
+    getCert)
+        getCert "${2}"
+        ;;
+    uploadCert)
+        uploadCert "${2}" "${3}"
+        ;;
+esac
