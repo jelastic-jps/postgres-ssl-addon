@@ -54,7 +54,7 @@ if [ "x${COMPUTE_TYPE}" == "xpostgres" ]; then
         openssl genrsa -out ${CERT_DIR}/${CLIENT_CERT_NAME}.key ${KEY_SIZE}
         openssl req -new -key ${CERT_DIR}/${CLIENT_CERT_NAME}.key -out ${CERT_DIR}/${CLIENT_CERT_NAME}.csr -subj "/C=$KEY_COUNTRY/ST=$KEY_PROVINCE/L=$KEY_CITY/O=$KEY_ORG/CN=$PG_USER"
         #signing the client cert
-        openssl x509 -req -in ${CERT_DIR}/${CLIENT_CERT_NAME}.csr -CA ${CERT_DIR}/root.crt -CAkey ${CERT_DIR}/server.key -out ${CERT_DIR}/${CLIENT_CERT_NAME}.crt -CAcreateserial
+        openssl x509 -req -in ${CERT_DIR}/${CLIENT_CERT_NAME}.csr -CA ${CERT_DIR}/root.crt -CAkey ${CERT_DIR}/root.key -out ${CERT_DIR}/${CLIENT_CERT_NAME}.crt -CAcreateserial
     fi
 
 fi
