@@ -210,6 +210,7 @@ actions:
                 fi
             fi
             touch /var/lib/pgsql/data/pg_ssl.conf
+            echo "include '/var/lib/pgsql/data/pg_ssl.conf'" > ${globals.pgConfig}
             if [ -e ${globals.pgConfig} ]; then
                 for i in ssl ssl_ciphers ssl_cert_file ssl_ca_file ssl_key_file ssl_prefer_server_ciphers
                 do
@@ -218,17 +219,17 @@ actions:
                 if grep -q '^ssl_cert_file' ${globals.pgConfig}; then 
                     sed -ci -e "s|ssl_cert_file.*|ssl_cert_file = '/var/lib/jelastic/keys/SSL-TLS/server/server.crt'|" ${globals.pgConfig};
                 else 
-                    echo "ssl_cert_file = '/var/lib/jelastic/keys/SSL-TLS/server/server.crt'" >> ${globals.pgConfig};
+                    echo "ssl_cert_file = '/var/lib/jelastic/keys/SSL-TLS/server/server.crt'" >> /var/lib/pgsql/data/pg_ssl.conf;
                 fi
                 if grep -q '^ssl_ca_file' ${globals.pgConfig}; then 
                     sed -ci -e "s|ssl_ca_file.*|ssl_ca_file = '/var/lib/jelastic/keys/SSL-TLS/server/root.crt'|" ${globals.pgConfig};             
                 else 
-                    echo "ssl_ca_file = '/var/lib/jelastic/keys/SSL-TLS/server/root.crt'" >> ${globals.pgConfig};
+                    echo "ssl_ca_file = '/var/lib/jelastic/keys/SSL-TLS/server/root.crt'" >> /var/lib/pgsql/data/pg_ssl.conf;
                 fi
                 if grep -q '^ssl_key_file' ${globals.pgConfig}; then
                     sed -ci -e "s|ssl_key_file.*|ssl_key_file = '/var/lib/jelastic/keys/SSL-TLS/server/server.key'|" ${globals.pgConfig};
                 else 
-                    echo "ssl_key_file = '/var/lib/jelastic/keys/SSL-TLS/server/server.key'" >> ${globals.pgConfig};
+                    echo "ssl_key_file = '/var/lib/jelastic/keys/SSL-TLS/server/server.key'" >> /var/lib/pgsql/data/pg_ssl.conf;
                 fi
                 for i in ssl ssl_prefer_server_cipher
                 do
