@@ -22,6 +22,7 @@ globals:
   pgConfig: /var/lib/pgsql/data/postgresql.conf
   pgHbaConfig: /var/lib/pgsql/data/pg_hba.conf
   pgpoolConfig: /etc/pgpool-II/pgpool.conf
+  certFolder: /var/lib/jelastic/keys/SSL-TLS
   keyPass: ${fn.password}
 
 onInstall:
