@@ -3,6 +3,18 @@
 source /etc/profile
 source /etc/jelastic/metainf.conf 
 
+TARGET_LAYER=$3
+ENV_NAME=$2
+
+if [ -z "${ENV_NAME}" ]; then
+    NODE_NAME_LENGTH=$(hostname|grep -o 'node[0-9]*-'|wc -c)
+    ENV_NAME=$(hostname|cut -c ${NODE_NAME_LENGTH}- 2>/dev/null)
+fi
+
+if [ -z "${TARGET_LAYER}" ]; then
+    TARGET_LAYER=${COMPUTE_TYPE}
+fi
+
 CERT_DIR="/var/lib/jelastic/keys/SSL-TLS";
 [ -d "$CERT_DIR" ] || mkdir -p "$CERT_DIR";
 
@@ -19,12 +31,15 @@ CERT_DIR="/var/lib/jelastic/keys/SSL-TLS";
 [ -z "$PG_USER" ] && export PG_USER="webadmin"
 
 #generating server key, cert and root cert
+if [ ! -f ${CERT_DIR}/root.crt ]; then
+    RANDFILE=/tmp/.random openssl genrsa ${KEY_SIZE} > ${CERT_DIR}/root.key
+    RANDFILE=/tmp/.random openssl req -new -x509 -nodes -days 3650 -key ${CERT_DIR}/root.key -subj "/C=$KEY_COUNTRY/ST=$KEY_PROVINCE/L=$KEY_CITY/O=$KEY_ORG/CN=${TARGET_LAYER}.${ENV_NAME}" > ${CERT_DIR}/root.crt
+fi
+
 if [ ! -f ${CERT_DIR}/server.crt ]; then
-    openssl genrsa -out ${CERT_DIR}/server.key ${KEY_SIZE}
-    chmod 400 ${CERT_DIR}/server.key
-    chown postgres:postgres ${CERT_DIR}/server.key
-    openssl req -new -key ${CERT_DIR}/server.key -days ${KEY_EXPIRE} -out ${CERT_DIR}/server.crt -x509 -subj "/C=$KEY_COUNTRY/ST=$KEY_PROVINCE/L=$KEY_CITY/O=$KEY_ORG/CN=$KEY_HOST";
-    cp ${CERT_DIR}/server.crt ${CERT_DIR}/root.crt
+    RANDFILE=/tmp/.random openssl req -newkey rsa:2048 -days 3650 -nodes -subj "/C=$KEY_COUNTRY/ST=$KEY_PROVINCE/L=$KEY_CITY/O=$KEY_ORG/CN=${KEY_HOST}" -keyout ${CERT_DIR}/server.key > ${CERT_DIR}/server-req.pem
+    RANDFILE=/tmp/.random openssl x509 -req -in ${CERT_DIR}/server-req.pem -days 3650 -CA ${CERT_DIR}/root.crt -CAkey ${CERT_DIR}/root.key -set_serial 01 > ${CERT_DIR}/server.crt
+    chmod 400 ${CERT_DIR}/root.key ${CERT_DIR}/server.key ${CERT_DIR}/server.crt ${CERT_DIR}/root.crt
 fi
 
 if [ "x${COMPUTE_TYPE}" == "xpostgres" ]; then
