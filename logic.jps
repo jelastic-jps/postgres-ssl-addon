@@ -77,6 +77,12 @@ buttons:
     href: https://www.virtuozzo.com/application-platform-docs/ssl-for-pgsql/
 
 actions:
+  uploadCertsAndKeys:
+    - cmd[${this.newNodes}]: |-
+        copyCert uploadCert ${globals.certFolder}/root.key '${globals.rootCaKey}'
+        copyCert uploadCert ${globals.certFolder}/root.crt '${globals.rootCaCert}'
+      user: root
+
   reGenerateCerts:
     - cmd[${targetNodes.nodeGroup}]: rm -rf /var/lib/jelastic/keys/SSL-TLS/*;
     - generateCerts:
