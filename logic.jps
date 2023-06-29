@@ -22,11 +22,33 @@ globals:
   pgConfig: /var/lib/pgsql/data/postgresql.conf
   pgHbaConfig: /var/lib/pgsql/data/pg_hba.conf
   pgpoolConfig: /etc/pgpool-II/pgpool.conf
+  keyPass: ${fn.password}
 
 onInstall:
   - checkApplication
+  - getMasterId
+  - env.control.AddContainerEnvVars[${targetNodes.nodeGroup}]:
+      vars: {"KEY_PASS":"${globals.keyPass}"}
+  - cmd[${targetNodes.nodeGroup}]: |-
+      mkdir -p /var/lib/jelastic/keys/SSL-TLS/server/
+      wget -O /usr/local/sbin/copyCert ${baseUrl}/scripts/copyCert?_r=${fn.random};
+      chmod +x /usr/local/sbin/copyCert
   - turnOnSSLForNodes:
-      nodesToEnableSSL: ${targetNodes.nodeGroup}
+      nodesToEnableSSL: ${globals.masterId}
+  - if (nodes.${targetNodes.nodeGroup}.length > 1):
+      - cmd[${globals.masterId}]: copyCert getCert ${globals.certFolder}/server/root.crt
+      - setGlobals:
+          rootCaCert: ${response.out}
+      - cmd[${globals.masterId}]: copyCert getCert ${globals.certFolder}/server/root.key
+      - setGlobals:
+          rootCaKey: ${response.out}
+      - uploadCertsAndKeys:
+          newNodes: ${targetNodes.nodeGroup}
+      - cmd[${targetNodes.nodeGroup}]: |-
+          chown 700:700 ${globals.certFolder}/*
+        user: root
+      - turnOnSSLForNodes:
+          nodesToEnableSSL: ${targetNodes.nodeGroup}
 
 onUninstall:
   - disableSSL
@@ -42,6 +64,28 @@ onBeforeServiceScaleOut[${targetNodes.nodeGroup}]:
         sed -ci -e 's/^[[:space:]]*ssl[[:space:]]*=[[:space:]]*on/ssl = off/' ${globals.pgConfig}
       
 onAfterServiceScaleOut[${targetNodes.nodeGroup}]:
+  - cmd[${targetNodes.nodeGroup}]: |-
+      mkdir -p /var/lib/jelastic/keys/SSL-TLS/server/
+      wget -O /usr/local/sbin/copyCert ${baseUrl}/scripts/copyCert?_r=${fn.random};
+      chmod +x /usr/local/sbin/copyCert
+      grep -q  "${globals.certFolder}" /etc/jelastic/redeploy.conf || echo "${globals.certFolder}" >> /etc/jelastic/redeploy.conf
+      source /etc/jelastic/metainf.conf
+      if [ "x$COMPUTE_TYPE" == "xmariadb" ] ; then
+          if [ -f "${globals.dbConfigFile}" ]; then
+              grep -q '^[[:space:]]*\[sst\]' ${globals.dbConfigFile} || echo '[sst]' >> ${globals.dbConfigFile}
+              grep -q '^[[:space:]]*ssl-mode=DISABLED' ${globals.dbConfigFile} || sed -ci -e '/\[sst\]/ a\ssl-mode=DISABLED' ${globals.dbConfigFile}
+          fi
+      fi
+    user: root
+  - getMasterId
+  - cmd[${globals.masterId}]: copyCert getCert ${globals.certFolder}/server/root.crt
+  - setGlobals:
+      rootCaCert: ${response.out}
+  - cmd[${globals.masterId}]: copyCert getCert ${globals.certFolder}/server/root.key
+  - setGlobals:
+      rootCaKey: ${response.out}
+  - uploadCertsAndKeys:
+      newNodes: ${event.response.nodes.join(id,)}
   - addCertsForNewNodes
   - if ('${event.params.nodeGroup}'.indexOf('sqldb') > -1):
     - cmd[${targetNodes.nodeGroup}]: |-
@@ -77,6 +121,14 @@ buttons:
     href: https://www.virtuozzo.com/application-platform-docs/ssl-for-pgsql/
 
 actions:
+  getMasterId:
+    - forEach(nodes.${targetNodes.nodeGroup}):
+      - cmd[${@i.id}]: |- 
+          source /.jelenv;  
+          echo ${MASTER_ID};
+      - setGlobals:
+          masterId: ${response.out}
+
   uploadCertsAndKeys:
     - cmd[${this.newNodes}]: |-
         copyCert uploadCert ${globals.certFolder}/root.key '${globals.rootCaKey}'
@@ -102,10 +154,12 @@ actions:
   generateCerts:
     - cmd[${this.affectedNodes}]: |-
         [ -f /usr/local/sbin/selfcertgen ] && rm -f /usr/local/sbin/selfcertgen;
+        [ -f /usr/local/sbin/copyCert ] && rm -f /usr/local/sbin/copyCert;
         wget -O /usr/local/sbin/selfcertgen ${baseUrl}/scripts/selfcertgen?_r=${fn.random};
-        chmod +x /usr/local/sbin/selfcertgen
-        selfcertgen;
-        chown -R postgres:postgres /var/lib/jelastic/keys/SSL-TLS /usr/local/sbin/selfcertgen; chmod 600 /var/lib/jelastic/keys/SSL-TLS/*
+        wget -O /usr/local/sbin/copyCert ${baseUrl}/scripts/copyCert?_r=${fn.random};
+        chmod +x /usr/local/sbin/selfcertgen /usr/local/sbin/copyCert
+        selfcertgen root ${env.domain} ${targetNodes.nodeGroup};
+        chown -R 700:700 ${globals.certFolder} /usr/local/sbin/selfcertgen; chmod 600 ${globals.certFolder}/*
       user: root
     - cmd[${this.affectedNodes}]: |-
         rm -rf /var/lib/jelastic/keys/SSL-TLS/client; mkdir -p /var/lib/jelastic/keys/SSL-TLS/client;
