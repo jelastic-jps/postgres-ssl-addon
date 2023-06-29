@@ -33,6 +33,7 @@ onInstall:
       mkdir -p /var/lib/jelastic/keys/SSL-TLS/server/
       wget -O /usr/local/sbin/copyCert ${baseUrl}/scripts/copyCert?_r=${fn.random};
       chmod +x /usr/local/sbin/copyCert
+    user: root
   - turnOnSSLForNodes:
       nodesToEnableSSL: ${globals.masterId}
   - if (nodes.${targetNodes.nodeGroup}.length > 1):
