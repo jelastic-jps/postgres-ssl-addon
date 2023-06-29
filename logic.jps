@@ -231,7 +231,7 @@ actions:
                 fi
                 for i in ssl ssl_prefer_server_cipher
                 do
-                    sed -ci -e "s/^${i} = off/${i} = on/" ${globals.pgConfig} 
+                    sed -ci -e "s/^${i}[[:space:]]*=[[:space:]]*off/${i} = on/" ${globals.pgConfig} 
                 done
             fi
             sed -ci -e "s/host[[:space:]]*all[[:space:]]*all[[:space:]]*0.0.0.0\/0[[:space:]]*\(md5\|scram-sha-256\)[[:space:]]*/hostssl    all    all    0.0.0.0\/0    scram-sha-256/" ${globals.pgHbaConfig}
