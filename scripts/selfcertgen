@@ -60,5 +60,7 @@ if [ "x${COMPUTE_TYPE}" == "xpostgres" ]; then
 fi
 
 #fixing owherships
-chmod 600 /var/lib/jelastic/keys/SSL-TLS/*
-chown -R postgres:postgres /var/lib/jelastic/keys/SSL-TLS/* /var/lib/jelastic/keys/SSL-TLS 
+if [ "$UID" == '0' ]; then
+    chmod 600 /var/lib/jelastic/keys/SSL-TLS/*
+    chown -R postgres:postgres /var/lib/jelastic/keys/SSL-TLS/* /var/lib/jelastic/keys/SSL-TLS
+fi
