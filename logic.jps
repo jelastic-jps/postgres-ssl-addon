@@ -210,7 +210,7 @@ actions:
                 fi
             fi
             touch /var/lib/pgsql/data/pg_ssl.conf
-            echo "include '/var/lib/pgsql/data/pg_ssl.conf'" > ${globals.pgConfig}
+            echo "include '/var/lib/pgsql/data/pg_ssl.conf'" >> ${globals.pgConfig}
             if [ -e ${globals.pgConfig} ]; then
                 for i in ssl ssl_ciphers ssl_cert_file ssl_ca_file ssl_key_file ssl_prefer_server_ciphers
                 do
