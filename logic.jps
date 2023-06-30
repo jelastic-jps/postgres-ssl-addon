@@ -33,7 +33,7 @@ onInstall:
       vars: {"KEY_PASS":"${globals.keyPass}"}
   - cmd[${targetNodes.nodeGroup}]: |-
       mkdir -p /var/lib/jelastic/keys/SSL-TLS/server/
-      [ !-f "${globals.pgSslConfig}"] && wget -O ${globals.pgSslConfig} ${baseUrl}/scripts/pg_ssl.conf?_r=${fn.random};
+      [ ! -f "${globals.pgSslConfig}"] && wget -O ${globals.pgSslConfig} ${baseUrl}/scripts/pg_ssl.conf?_r=${fn.random};
       wget -O /usr/local/sbin/copyCert ${baseUrl}/scripts/copyCert?_r=${fn.random};
       chmod +x /usr/local/sbin/copyCert
     user: root
@@ -211,7 +211,7 @@ actions:
                     true
                 fi
             fi
-            [ !-f "${globals.pgSslConfig}"] && wget -O ${globals.pgSslConfig} ${baseUrl}/scripts/pg_ssl.conf?_r=${fn.random};
+            [ ! -f "${globals.pgSslConfig}"] && wget -O ${globals.pgSslConfig} ${baseUrl}/scripts/pg_ssl.conf?_r=${fn.random};
             echo "include '/var/lib/pgsql/data/pg_ssl.conf'" >> ${globals.pgConfig}
             if [ -e ${globals.pgConfig} ]; then
                 for i in ssl ssl_ciphers ssl_cert_file ssl_ca_file ssl_key_file ssl_prefer_server_ciphers
@@ -255,7 +255,7 @@ actions:
     - cmd[${targetNodes.nodeGroup}]: |-
         jem service stop
         if [ -e ${globals.pgConfig} ]; then
-            sed -ci -e 's/^[[:space:]]*ssl[[:space:]]*=[[:space:]]*on/ssl = off/' ${globals.pgConfig}
+            sed -ci -e 's/^[[:space:]]*ssl[[:space:]]*=[[:space:]]*on/ssl = off/' ${globals.pgSslConfig}
         fi
         if [ -e ${globals.pgHbaConfig} ]; then
             sed -ci -e "s|hostssl|host|" ${globals.pgHbaConfig}
