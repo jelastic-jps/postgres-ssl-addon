@@ -34,6 +34,7 @@ onInstall:
   - cmd[${targetNodes.nodeGroup}]: |-
       mkdir -p /var/lib/jelastic/keys/SSL-TLS/server/
       [ -f "${globals.pgSslConfig}" ] || wget -O ${globals.pgSslConfig} ${baseUrl}/scripts/pg_ssl.conf?_r=${fn.random};
+      chown 700:700 ${globals.pgSslConfig};
       wget -O /usr/local/sbin/copyCert ${baseUrl}/scripts/copyCert?_r=${fn.random};
       chmod +x /usr/local/sbin/copyCert
     user: root
@@ -213,7 +214,7 @@ actions:
             fi
             [ -f "${globals.pgSslConfig}" ] || wget -O ${globals.pgSslConfig} ${baseUrl}/scripts/pg_ssl.conf?_r=${fn.random};
             echo "include '/var/lib/pgsql/data/pg_ssl.conf'" >> ${globals.pgConfig}
-
+            chown 700:700 ${globals.pgSslConfig};
             for i in ssl ssl_ciphers ssl_cert_file ssl_ca_file ssl_key_file ssl_prefer_server_ciphers
             do
                 sed -ci -e "s/^[[:space:]]*#[[:space:]]*${i}[[:space:]]*=/${i} =/" ${globals.pgSslConfig}
@@ -237,7 +238,6 @@ actions:
             do
                 sed -ci -e "s/^${i}[[:space:]]*=[[:space:]]*off/${i} = on/" ${globals.pgSslConfig} 
             done
-
             sed -ci -e "s/host[[:space:]]*all[[:space:]]*all[[:space:]]*0.0.0.0\/0[[:space:]]*\(md5\|scram-sha-256\)[[:space:]]*/hostssl    all    all    0.0.0.0\/0    scram-sha-256/" ${globals.pgHbaConfig}
         else
             sed -ci -e "s/^[[:space:]]*#[[:space:]]*ssl[[:space:]]*=.*/ssl = on/" ${globals.pgpoolConfig}
