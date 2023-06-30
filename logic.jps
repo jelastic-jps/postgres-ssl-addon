@@ -215,7 +215,7 @@ actions:
             [ -f "${globals.pgSslConfig}" ] || wget -O ${globals.pgSslConfig} ${baseUrl}/scripts/pg_ssl.conf?_r=${fn.random};
             echo "include '/var/lib/pgsql/data/pg_ssl.conf'" >> ${globals.pgConfig}
             chown 700:700 ${globals.pgSslConfig};
-            for i in ssl ssl_ciphers ssl_cert_file ssl_ca_file ssl_key_file ssl_prefer_server_ciphers
+            for i in ssl ssl_ciphers ssl_cert_file ssl_ca_file ssl_key_file
             do
                 sed -ci -e "s/^[[:space:]]*#[[:space:]]*${i}[[:space:]]*=/${i} =/" ${globals.pgSslConfig}
             done
