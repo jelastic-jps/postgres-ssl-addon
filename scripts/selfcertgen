@@ -32,29 +32,35 @@ CERT_DIR="/var/lib/jelastic/keys/SSL-TLS";
 
 #generating server key, cert and root cert
 if [ ! -f ${CERT_DIR}/root.crt ]; then
-    RANDFILE=/tmp/.random openssl genrsa ${KEY_SIZE} > ${CERT_DIR}/root.key
-    RANDFILE=/tmp/.random openssl req -new -x509 -nodes -days 3650 -key ${CERT_DIR}/root.key -subj "/C=$KEY_COUNTRY/ST=$KEY_PROVINCE/L=$KEY_CITY/O=$KEY_ORG/CN=${TARGET_LAYER}.${ENV_NAME}" > ${CERT_DIR}/root.crt
+    if [ ! -f ${CERT_DIR}/server/root.crt ]; then
+        RANDFILE=/tmp/.random openssl genrsa ${KEY_SIZE} > ${CERT_DIR}/root.key
+        RANDFILE=/tmp/.random openssl req -new -x509 -nodes -days 3650 -key ${CERT_DIR}/root.key -subj "/C=$KEY_COUNTRY/ST=$KEY_PROVINCE/L=$KEY_CITY/O=$KEY_ORG/CN=${TARGET_LAYER}.${ENV_NAME}" > ${CERT_DIR}/root.crt
+    fi
 fi
 
 if [ ! -f ${CERT_DIR}/server.crt ]; then
-    RANDFILE=/tmp/.random openssl req -newkey rsa:2048 -days 3650 -nodes -subj "/C=$KEY_COUNTRY/ST=$KEY_PROVINCE/L=$KEY_CITY/O=$KEY_ORG/CN=${KEY_HOST}" -keyout ${CERT_DIR}/server.key > ${CERT_DIR}/server-req.pem
-    RANDFILE=/tmp/.random openssl x509 -req -in ${CERT_DIR}/server-req.pem -days 3650 -CA ${CERT_DIR}/root.crt -CAkey ${CERT_DIR}/root.key -set_serial 01 > ${CERT_DIR}/server.crt
-    chmod 400 ${CERT_DIR}/root.key ${CERT_DIR}/server.key ${CERT_DIR}/server.crt ${CERT_DIR}/root.crt
+    if [ ! -f ${CERT_DIR}/server/server.crt ]; then
+        RANDFILE=/tmp/.random openssl req -newkey rsa:2048 -days 3650 -nodes -subj "/C=$KEY_COUNTRY/ST=$KEY_PROVINCE/L=$KEY_CITY/O=$KEY_ORG/CN=${KEY_HOST}" -keyout ${CERT_DIR}/server.key > ${CERT_DIR}/server-req.pem
+        RANDFILE=/tmp/.random openssl x509 -req -in ${CERT_DIR}/server-req.pem -days 3650 -CA ${CERT_DIR}/root.crt -CAkey ${CERT_DIR}/root.key -set_serial 01 > ${CERT_DIR}/server.crt
+        chmod 400 ${CERT_DIR}/root.key ${CERT_DIR}/server.key ${CERT_DIR}/server.crt ${CERT_DIR}/root.crt
+    fi
 fi
 
 if [ "x${COMPUTE_TYPE}" == "xpostgres" ]; then
     #generating client certs
     if [ "x${PG_USER}" == "xwebadmin" ]; then
         CLIENT_CERT_NAME="client"
+        ROOT_CERT_DIR=""
     else
         CLIENT_CERT_NAME="${PG_USER}"
+        ROOT_CERT_DIR="server"
     fi
 
     if [ ! -f ${CERT_DIR}/${CLIENT_CERT_NAME}.crt ]; then
         openssl genrsa -out ${CERT_DIR}/${CLIENT_CERT_NAME}.key ${KEY_SIZE}
         openssl req -new -key ${CERT_DIR}/${CLIENT_CERT_NAME}.key -out ${CERT_DIR}/${CLIENT_CERT_NAME}.csr -subj "/C=$KEY_COUNTRY/ST=$KEY_PROVINCE/L=$KEY_CITY/O=$KEY_ORG/CN=$PG_USER"
         #signing the client cert
-        openssl x509 -req -in ${CERT_DIR}/${CLIENT_CERT_NAME}.csr -CA ${CERT_DIR}/root.crt -CAkey ${CERT_DIR}/root.key -out ${CERT_DIR}/${CLIENT_CERT_NAME}.crt -CAcreateserial
+        openssl x509 -req -in ${CERT_DIR}/${CLIENT_CERT_NAME}.csr -CA ${CERT_DIR}/${ROOT_CERT_DIR}/root.crt -CAkey ${CERT_DIR}/${ROOT_CERT_DIR}/root.key -out ${CERT_DIR}/${CLIENT_CERT_NAME}.crt -CAcreateserial
     fi
 
 fi
