@@ -250,6 +250,7 @@ actions:
             sed -ci -e "s/^[[:space:]]*host[[:space:]]*all[[:space:]]*all[[:space:]]*0.0.0.0\/0[[:space:]]*\(md5\|scram-sha-256\)[[:space:]]*/hostssl    all    all    0.0.0.0\/0    scram-sha-256/" /etc/pgpool-II/pool_hba.conf
         fi
         jem service restart
+      user: root
   
   disableSSL:
     - cmd[${targetNodes.nodeGroup}]: |-
