@@ -37,9 +37,9 @@ if [ ! -f ${CERT_DIR}/root.crt ]; then
         RANDFILE=/tmp/.random openssl req -new -x509 -nodes -days 3650 -key ${CERT_DIR}/root.key -subj "/C=$KEY_COUNTRY/ST=$KEY_PROVINCE/L=$KEY_CITY/O=$KEY_ORG/CN=${TARGET_LAYER}.${ENV_NAME}" > ${CERT_DIR}/root.crt
     else
         echo "Root CA certificate is already present ${CERT_DIR}/server/root.crt"
-        ROOT_CERT="${CERT_DIR}/server/root.crt"
-        ROOT_KEY="${CERT_DIR}/server/root.key"
     fi
+    ROOT_CERT="${CERT_DIR}/server/root.crt"
+    ROOT_KEY="${CERT_DIR}/server/root.key"
 else
     echo "Root CA certificate is already present ${CERT_DIR}/root.crt"
     ROOT_CERT="${CERT_DIR}/root.crt"
