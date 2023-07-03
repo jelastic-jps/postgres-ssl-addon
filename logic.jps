@@ -169,7 +169,7 @@ actions:
         do
             [ -f /var/lib/jelastic/keys/SSL-TLS/${i} ] && mv -f /var/lib/jelastic/keys/SSL-TLS/${i} /var/lib/jelastic/keys/SSL-TLS/client/${i}
         done
-        for i in root.crt root.key root.srl server.crt server.key
+        for i in root.crt root.key root.srl server.crt server.key server-req.pem
         do
             [ -f /var/lib/jelastic/keys/SSL-TLS/${i} ] && mv -f /var/lib/jelastic/keys/SSL-TLS/${i} /var/lib/jelastic/keys/SSL-TLS/server/${i}
         done
