@@ -37,15 +37,19 @@ if [ ! -f ${CERT_DIR}/root.crt ]; then
         RANDFILE=/tmp/.random openssl req -new -x509 -nodes -days 3650 -key ${CERT_DIR}/root.key -subj "/C=$KEY_COUNTRY/ST=$KEY_PROVINCE/L=$KEY_CITY/O=$KEY_ORG/CN=${TARGET_LAYER}.${ENV_NAME}" > ${CERT_DIR}/root.crt
     else
         echo "Root CA certificate is already present ${CERT_DIR}/server/root.crt"
+        ROOT_CERT="${CERT_DIR}/server/root.crt"
+        ROOT_KEY="${CERT_DIR}/server/root.key"
     fi
 else
     echo "Root CA certificate is already present ${CERT_DIR}/root.crt"
+    ROOT_CERT="${CERT_DIR}/root.crt"
+    ROOT_KEY="${CERT_DIR}/root.key"
 fi
 
 if [ ! -f ${CERT_DIR}/server.crt ]; then
     if [ ! -f ${CERT_DIR}/server/server.crt ]; then
         RANDFILE=/tmp/.random openssl req -newkey rsa:2048 -days 3650 -nodes -subj "/C=$KEY_COUNTRY/ST=$KEY_PROVINCE/L=$KEY_CITY/O=$KEY_ORG/CN=${KEY_HOST}" -keyout ${CERT_DIR}/server.key > ${CERT_DIR}/server-req.pem
-        RANDFILE=/tmp/.random openssl x509 -req -in ${CERT_DIR}/server-req.pem -days 3650 -CA ${CERT_DIR}/root.crt -CAkey ${CERT_DIR}/root.key -set_serial 01 > ${CERT_DIR}/server.crt
+        RANDFILE=/tmp/.random openssl x509 -req -in ${CERT_DIR}/server-req.pem -days 3650 -CA ${ROOT_CERT} -CAkey ${ROOT_KEY} -set_serial 01 > ${CERT_DIR}/server.crt
         chmod 400 ${CERT_DIR}/root.key ${CERT_DIR}/server.key ${CERT_DIR}/server.crt ${CERT_DIR}/root.crt
     else
         echo "Server certificate is already present ${CERT_DIR}/server/server.crt "
@@ -55,15 +59,6 @@ else
 fi
 
 if [ "x${COMPUTE_TYPE}" == "xpostgres" ]; then
-    if [ -f ${CERT_DIR}/root.crt ]; then
-        ROOT_CERT="${CERT_DIR}/root.crt"
-        ROOT_KEY="${CERT_DIR}/root.key"
-    elif [ -f ${CERT_DIR}/server/root.crt ]; then
-        ROOT_CERT="${CERT_DIR}/server/root.crt"
-        ROOT_KEY="${CERT_DIR}/server/root.key"
-    else
-        echo "root.crt is not found. client cert will not be generated."
-    fi
 
     if [ "x${PG_USER}" == "xwebadmin" ]; then
         CLIENT_CERT_NAME="client"
