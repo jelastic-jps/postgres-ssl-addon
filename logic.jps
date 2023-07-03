@@ -32,7 +32,7 @@ onInstall:
   - env.control.AddContainerEnvVars[${targetNodes.nodeGroup}]:
       vars: {"KEY_PASS":"${globals.keyPass}"}
   - cmd[${targetNodes.nodeGroup}]: |-
-      mkdir -p ${globals.certFolder}/SSL-TLS/server/
+      mkdir -p ${globals.certFolder}/server/
       [ -f "${globals.pgSslConfig}" ] || wget -O ${globals.pgSslConfig} ${baseUrl}/scripts/pg_ssl.conf?_r=${fn.random};
       chown 700:700 ${globals.pgSslConfig};
       wget -O /usr/local/sbin/copyCert ${baseUrl}/scripts/copyCert?_r=${fn.random};
@@ -74,7 +74,7 @@ onBeforeServiceScaleOut[${targetNodes.nodeGroup}]:
 onAfterServiceScaleOut[${targetNodes.nodeGroup}]:
   - cmd[${targetNodes.nodeGroup}]: |-
       source /etc/jelastic/metainf.conf
-      mkdir -p ${globals.certFolder}/SSL-TLS/server/
+      mkdir -p ${globals.certFolder}/server/
       wget -O /usr/local/sbin/copyCert ${baseUrl}/scripts/copyCert?_r=${fn.random};
       chmod +x /usr/local/sbin/copyCert
       grep -q  "${globals.certFolder}" /etc/jelastic/redeploy.conf || echo "${globals.certFolder}" >> /etc/jelastic/redeploy.conf
@@ -138,7 +138,7 @@ actions:
       user: root
 
   reGenerateCerts:
-    - cmd[${targetNodes.nodeGroup}]: rm -rf ${globals.certFolder}/SSL-TLS/*;
+    - cmd[${targetNodes.nodeGroup}]: rm -rf ${globals.certFolder}/*;
     - generateCerts:
         affectedNodes: ${targetNodes.nodeGroup}
     - cmd[${targetNodes.nodeGroup}]: jem service restart
@@ -164,19 +164,19 @@ actions:
         chown -R 700:700 ${globals.certFolder} /usr/local/sbin/selfcertgen; chmod 600 ${globals.certFolder}/*
       user: root
     - cmd[${this.affectedNodes}]: |-
-        rm -rf ${globals.certFolder}/SSL-TLS/client; mkdir -p ${globals.certFolder}SSL-TLS/client;
-        rm -rf ${globals.certFolder}/SSL-TLS/server; mkdir -p ${globals.certFolder}/SSL-TLS/server;
-        chown -R postgres:postgres ${globals.certFolder}/SSL-TLS/*
-        rm -f ${globals.certFolder}/SSL-TLS/client.csr
+        rm -rf ${globals.certFolder}/client; mkdir -p ${globals.certFolder}/client;
+        rm -rf ${globals.certFolder}/server; mkdir -p ${globals.certFolder}/server;
+        chown -R postgres:postgres ${globals.certFolder}/*
+        rm -f ${globals.certFolder}/client.csr
         for i in client.crt client.key
         do
-            [ -f ${globals.certFolder}/SSL-TLS/${i} ] && mv -f ${globals.certFolder}/SSL-TLS/${i} ${globals.certFolder}/SSL-TLS/client/${i}
+            [ -f ${globals.certFolder}/${i} ] && mv -f ${globals.certFolder}/${i} ${globals.certFolder}/client/${i}
         done
         for i in root.crt root.key root.srl server.crt server.key
         do
-            [ -f ${globals.certFolder}/SSL-TLS/${i} ] && mv -f ${globals.certFolder}/SSL-TLS/${i} ${globals.certFolder}/SSL-TLS/server/${i}
+            [ -f ${globals.certFolder}/${i} ] && mv -f ${globals.certFolder}/${i} ${globals.certFolder}/server/${i}
         done
-        ln -sfT ${globals.certFolder}/server/root.crt ${globals.certFolder}/SSL-TLS/client/root.crt
+        ln -sfT ${globals.certFolder}/server/root.crt ${globals.certFolder}/client/root.crt
       user: root
       
   getPswd:
@@ -198,7 +198,7 @@ actions:
       - if (nodes.pgpool):
         - setWebadminPasswordOnPgPool
     - cmd[${this.affectedNodes}]: |-
-        echo "${globals.certFolder}/SSL-TLS" >> /etc/jelastic/redeploy.conf
+        echo "${globals.certFolder}" >> /etc/jelastic/redeploy.conf
         source /etc/jelastic/metainf.conf
         if [ "x$COMPUTE_TYPE" == "xpostgres" ] ; then
             if ! grep -q 'scram-sha-256' /var/lib/jelastic/overrides/postgres-passwd.lib; then
@@ -217,19 +217,19 @@ actions:
                 sed -ci -e "s/^[[:space:]]*#[[:space:]]*${i}[[:space:]]*=/${i} =/" ${globals.pgSslConfig}
             done
             if grep -q '^ssl_cert_file' ${globals.pgSslConfig}; then 
-                sed -ci -e "s|ssl_cert_file.*|ssl_cert_file = '${globals.certFolder}/SSL-TLS/server/server.crt'|" ${globals.pgSslConfig};
+                sed -ci -e "s|ssl_cert_file.*|ssl_cert_file = '${globals.certFolder}/server/server.crt'|" ${globals.pgSslConfig};
             else 
-                echo "ssl_cert_file = '${globals.certFolder}/SSL-TLS/server/server.crt'" >> ${globals.pgSslConfig};
+                echo "ssl_cert_file = '${globals.certFolder}/server/server.crt'" >> ${globals.pgSslConfig};
             fi
             if grep -q '^ssl_ca_file' ${globals.pgSslConfig}; then 
-                sed -ci -e "s|ssl_ca_file.*|ssl_ca_file = '${globals.certFolder}/SSL-TLS/server/root.crt'|" ${globals.pgSslConfig};             
+                sed -ci -e "s|ssl_ca_file.*|ssl_ca_file = '${globals.certFolder}/server/root.crt'|" ${globals.pgSslConfig};             
             else 
-                echo "ssl_ca_file = '${globals.certFolder}/SSL-TLS/server/root.crt'" >> ${globals.pgSslConfig};
+                echo "ssl_ca_file = '${globals.certFolder}/server/root.crt'" >> ${globals.pgSslConfig};
             fi
             if grep -q '^ssl_key_file' ${globals.pgSslConfig}; then
-                sed -ci -e "s|ssl_key_file.*|ssl_key_file = '${globals.certFolder}/SSL-TLS/server/server.key'|" ${globals.pgSslConfig};
+                sed -ci -e "s|ssl_key_file.*|ssl_key_file = '${globals.certFolder}/server/server.key'|" ${globals.pgSslConfig};
             else 
-                echo "ssl_key_file = '${globals.certFolder}/SSL-TLS/server/server.key'" >> ${globals.pgSslConfig};
+                echo "ssl_key_file = '${globals.certFolder}/server/server.key'" >> ${globals.pgSslConfig};
             fi
             for i in ssl ssl_prefer_server_cipher
             do
@@ -242,8 +242,8 @@ actions:
             sed -ci -e "s/^[[:space:]]*#[[:space:]]*enable_pool_hba[[:space:]]*=.*/enable_pool_hba = on/" ${globals.pgpoolConfig}
             sed -ci -e "s/^[[:space:]]*enable_pool_hba[[:space:]]*=.*/enable_pool_hba = on/" ${globals.pgpoolConfig}
             sed -ci -e "s/^[[:space:]]*#[[:space:]]*pool_passwd[[:space:]]*=/pool_passwd  =/" ${globals.pgpoolConfig}
-            sed -ci -e "s|^[[:space:]]*#[[:space:]]*ssl_key[[:space:]]*=.*|ssl_key = '/var/lib/jelastic/keys/SSL-TLS/server/server.key'|" ${globals.pgpoolConfig}
-            sed -ci -e "s|^[[:space:]]*#[[:space:]]*ssl_cert[[:space:]]*=.*|ssl_cert = '/var/lib/jelastic/keys/SSL-TLS/server/server.crt'|" ${globals.pgpoolConfig}
+            sed -ci -e "s|^[[:space:]]*#[[:space:]]*ssl_key[[:space:]]*=.*|ssl_key = '/var/lib/jelastic/keys/server/server.key'|" ${globals.pgpoolConfig}
+            sed -ci -e "s|^[[:space:]]*#[[:space:]]*ssl_cert[[:space:]]*=.*|ssl_cert = '/var/lib/jelastic/keys/server/server.crt'|" ${globals.pgpoolConfig}
             sed -ci -e "s/^[[:space:]]*host[[:space:]]*all[[:space:]]*all[[:space:]]*0.0.0.0\/0[[:space:]]*\(md5\|scram-sha-256\)[[:space:]]*/hostssl    all    all    0.0.0.0\/0    scram-sha-256/" /etc/pgpool-II/pool_hba.conf
         fi
         jem service restart
@@ -268,17 +268,17 @@ actions:
         fi
         for i in client.crt client.key root.crt
         do
-            rm -f ${globals.certFolder}/SSL-TLS/client/${i}
+            rm -f ${globals.certFolder}/client/${i}
         done
         for i in root.crt root.srl server.crt server.key
         do
-            rm -f ${globals.certFolder}/SSL-TLS/server/${i}
+            rm -f ${globals.certFolder}/server/${i}
         done
         sed -ci -e '/\/var\/lib\/jelastic\/keys\/SSL-TLS/d' /etc/jelastic/redeploy.conf
         for i in client server
         do
-            if [ -z "$(ls -A ${globals.certFolder}/SSL-TLS/${i})" ]; then
-                rm -rf ${globals.certFolder}/SSL-TLS/${i}
+            if [ -z "$(ls -A ${globals.certFolder}/${i})" ]; then
+                rm -rf ${globals.certFolder}/${i}
             fi
         done
         jem service start
@@ -311,7 +311,7 @@ actions:
 
   fixCertOwnPerm:
     - cmd[${targetNodes.nodeGroup}]: |-
-        chown -R postgres:postgres ${globals.certFolder}/SSL-TLS
+        chown -R postgres:postgres ${globals.certFolder}
       user: root
         
   turnOnSSLForNodes:
