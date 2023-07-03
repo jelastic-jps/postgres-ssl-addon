@@ -281,6 +281,7 @@ actions:
                 rm -rf ${globals.certFolder}/${i}
             fi
         done
+        rm -rf ${globals.certFolder}
         jem service start
       user: root
 
