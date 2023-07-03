@@ -60,6 +60,8 @@ else
     echo "Server certificate is already present ${CERT_DIR}/server.crt"
 fi
 
+rm -f /var/lib/jelastic/keys/SSL-TLS/server-req.pem
+
 if [ "x${COMPUTE_TYPE}" == "xpostgres" ]; then
 
     if [ "x${PG_USER}" == "xwebadmin" ]; then
