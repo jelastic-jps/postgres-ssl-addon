@@ -27,43 +27,23 @@ CERT_DIR="/var/lib/jelastic/keys/SSL-TLS";
 [ -z "$KEY_SIZE" ] && export KEY_SIZE=2048
 [ -z "$KEY_HOST" ] && export KEY_HOST=$(hostname)
 [ -z "$KEY_EXPIRE" ] && export KEY_EXPIRE=3650
-[ -n "${1}" ] && export PG_USER="${1}"
+[ -n "${1}"] && export PG_USER="${1}"
 [ -z "$PG_USER" ] && export PG_USER="webadmin"
 
 #generating server key, cert and root cert
 if [ ! -f ${CERT_DIR}/root.crt ]; then
-    if [ ! -f ${CERT_DIR}/server/root.crt ]; then
-        RANDFILE=/tmp/.random openssl genrsa ${KEY_SIZE} > ${CERT_DIR}/root.key
-        RANDFILE=/tmp/.random openssl req -new -x509 -nodes -days 3650 -key ${CERT_DIR}/root.key -subj "/C=$KEY_COUNTRY/ST=$KEY_PROVINCE/L=$KEY_CITY/O=$KEY_ORG/CN=${TARGET_LAYER}.${ENV_NAME}" > ${CERT_DIR}/root.crt
-        ROOT_CERT="${CERT_DIR}/root.crt"
-        ROOT_KEY="${CERT_DIR}/root.key"
-    else
-        echo "Root CA certificate is already present ${CERT_DIR}/server/root.crt"
-        ROOT_CERT="${CERT_DIR}/server/root.crt"
-        ROOT_KEY="${CERT_DIR}/server/root.key"
-    fi
-else
-    echo "Root CA certificate is already present ${CERT_DIR}/root.crt"
-    ROOT_CERT="${CERT_DIR}/root.crt"
-    ROOT_KEY="${CERT_DIR}/root.key"
+    RANDFILE=/tmp/.random openssl genrsa ${KEY_SIZE} > ${CERT_DIR}/root.key
+    RANDFILE=/tmp/.random openssl req -new -x509 -nodes -days 3650 -key ${CERT_DIR}/root.key -subj "/C=$KEY_COUNTRY/ST=$KEY_PROVINCE/L=$KEY_CITY/O=$KEY_ORG/CN=${TARGET_LAYER}.${ENV_NAME}" > ${CERT_DIR}/root.crt
 fi
 
 if [ ! -f ${CERT_DIR}/server.crt ]; then
-    if [ ! -f ${CERT_DIR}/server/server.crt ]; then
-        RANDFILE=/tmp/.random openssl req -newkey rsa:2048 -days 3650 -nodes -subj "/C=$KEY_COUNTRY/ST=$KEY_PROVINCE/L=$KEY_CITY/O=$KEY_ORG/CN=${KEY_HOST}" -keyout ${CERT_DIR}/server.key > ${CERT_DIR}/server-req.pem
-        RANDFILE=/tmp/.random openssl x509 -req -in ${CERT_DIR}/server-req.pem -days 3650 -CA ${ROOT_CERT} -CAkey ${ROOT_KEY} -set_serial 01 > ${CERT_DIR}/server.crt
-        chmod 400 ${CERT_DIR}/root.key ${CERT_DIR}/server.key ${CERT_DIR}/server.crt ${CERT_DIR}/root.crt
-    else
-        echo "Server certificate is already present ${CERT_DIR}/server/server.crt "
-    fi
-else
-    echo "Server certificate is already present ${CERT_DIR}/server.crt"
+    RANDFILE=/tmp/.random openssl req -newkey rsa:2048 -days 3650 -nodes -subj "/C=$KEY_COUNTRY/ST=$KEY_PROVINCE/L=$KEY_CITY/O=$KEY_ORG/CN=${KEY_HOST}" -keyout ${CERT_DIR}/server.key > ${CERT_DIR}/server-req.pem
+    RANDFILE=/tmp/.random openssl x509 -req -in ${CERT_DIR}/server-req.pem -days 3650 -CA ${CERT_DIR}/root.crt -CAkey ${CERT_DIR}/root.key -set_serial 01 > ${CERT_DIR}/server.crt
+    chmod 400 ${CERT_DIR}/root.key ${CERT_DIR}/server.key ${CERT_DIR}/server.crt ${CERT_DIR}/root.crt
 fi
 
-rm -f /var/lib/jelastic/keys/SSL-TLS/server-req.pem
-
 if [ "x${COMPUTE_TYPE}" == "xpostgres" ]; then
-
+    #generating client certs
     if [ "x${PG_USER}" == "xwebadmin" ]; then
         CLIENT_CERT_NAME="client"
     else
@@ -72,15 +52,13 @@ if [ "x${COMPUTE_TYPE}" == "xpostgres" ]; then
 
     if [ ! -f ${CERT_DIR}/${CLIENT_CERT_NAME}.crt ]; then
         openssl genrsa -out ${CERT_DIR}/${CLIENT_CERT_NAME}.key ${KEY_SIZE}
-        openssl req -new -key ${CERT_DIR}/${CLIENT_CERT_NAME}.key -out ${CERT_DIR}/${CLIENT_CERT_NAME}.csr -subj "/C=$KEY_COUNTRY/ST=$KEY_PROVINCE/L=$KEY_CITY/O=$KEY_ORG/CN=$PG_USER"
+        openssl req -new -key ${CERT_DIR}/${CLIENT_CERT_NAME}.key -days 365 -out ${CERT_DIR}/${CLIENT_CERT_NAME}.csr -subj "/C=$KEY_COUNTRY/ST=$KEY_PROVINCE/L=$KEY_CITY/O=$KEY_ORG/CN=$PG_USER"
         #signing the client cert
-        openssl x509 -req -in ${CERT_DIR}/${CLIENT_CERT_NAME}.csr -CA ${ROOT_CERT} -CAkey ${ROOT_KEY} -out ${CERT_DIR}/${CLIENT_CERT_NAME}.crt -CAcreateserial
+        openssl x509 -req -in ${CERT_DIR}/${CLIENT_CERT_NAME}.csr -CA ${CERT_DIR}/root.crt -CAkey ${CERT_DIR}/root.key -days 365 -out ${CERT_DIR}/${CLIENT_CERT_NAME}.crt -CAcreateserial
     fi
 
 fi
 
 #fixing owherships
-if [ "$UID" == '0' ]; then
-    chmod 600 /var/lib/jelastic/keys/SSL-TLS/*
-    chown -R postgres:postgres /var/lib/jelastic/keys/SSL-TLS/* /var/lib/jelastic/keys/SSL-TLS
-fi
+chmod 600 /var/lib/jelastic/keys/SSL-TLS/*
+chown -R postgres:postgres /var/lib/jelastic/keys/SSL-TLS/* /var/lib/jelastic/keys/SSL-TLS 
