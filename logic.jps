@@ -152,17 +152,28 @@ actions:
     - cmd[${targetNodes.nodeGroup}]: |-
         rm -rf ${globals.certFolder}/*;
       user: root
-    - installCertsOnEnv
+    - generateCerts:
+        affectedNodes: ${targetNodes.nodeGroup}
+    - forEach(nodes.${targetNodes.nodeGroup}):
+      - cmd[${@i.id}]: jem service start
 
   reGenerateServerCerts:
     - forEach(nodes.${targetNodes.nodeGroup}):
-      - cmd[${@i.id}]: jem service stop 
+      - cmd[${@i.id}]: jem service stop
+        user: root
     - cmd[${targetNodes.nodeGroup}]: |-
-        cp -f ${globals.certFolder}/server/* ${globals.certFolder}/;
-        selfcertgen
+        mv ${globals.certFolder}/server/root.* ${globals.certFolder}/;
+        rm -f ${globals.certFolder}/server/server.*
+        wget -O /usr/local/sbin/selfcertgen ${baseUrl}/scripts/selfcertgen?_r=${fn.random};
+        chmod +x /usr/local/sbin/selfcertgen /usr/local/sbin/copyCert;
+        chown 700:700 /usr/local/sbin/selfcertgen;
+        selfcertgen webadmin ${env.domain} ${targetNodes.nodeGroup};
+        mv -f ${globals.certFolder}/client/client.* ${globals.certFolder}/;
       user: root
     - moveCertsToDirs:
         affectedNodes: ${targetNodes.nodeGroup}
+    - cmd[${@i.id}]: jem service start
+      user: root
 
   reGenerateClientCerts:
     - if ('${targetNodes.nodeGroup}'.indexOf('pgpool') > -1):
@@ -170,13 +181,32 @@ actions:
           type: warning
           message: Generation of client SSL/TLS certificates is not supported for Pgpool-II nodes. 
     - forEach(nodes.${targetNodes.nodeGroup}):
-      - cmd[${@i.id}]: jem service stop 
+      - cmd[${@i.id}]: jem service stop
+        user: root
     - cmd[${targetNodes.nodeGroup}]: |-
-        cp ${globals.certFolder}/server/* ${globals.certFolder}/;
-        selfcertgen
-      user: root
-    - moveCertsToDirs:
+        mv -f ${globals.certFolder}/server/* ${globals.certFolder}/;
+    - generateCerts:
         affectedNodes: ${targetNodes.nodeGroup}
+    - cmd[${@i.id}]: jem service start
+      user: root
+
+  moveCertsToDirs:
+    - cmd[${this.affectedNodes}]: |-
+        rm -rf ${globals.certFolder}/client; mkdir -p ${globals.certFolder}/client;
+        rm -rf ${globals.certFolder}/server; mkdir -p ${globals.certFolder}/server;
+        chown -R 700:700 ${globals.certFolder}/*
+        rm -f ${globals.certFolder}/client.csr ${globals.certFolder}/server.csr ${globals.certFolder}/client-req.pem ${globals.certFolder}/server-req.pem
+        rm -f ${globals.certFolder}/{server.srl,client.csr}
+        for i in root.crt root.key server.crt server.key root.srl
+        do
+            [ -f ${globals.certFolder}/${i} ] && mv -f ${globals.certFolder}/${i} ${globals.certFolder}/server/${i}
+        done
+        for i in client.crt client.key
+        do
+            [ -f ${globals.certFolder}/${i} ] && mv -f ${globals.certFolder}/${i} ${globals.certFolder}/client/${i}
+        done
+        ln -sfT ${globals.certFolder}/server/root.crt ${globals.certFolder}/client/root.crt
+      user: root
 
   checkApplication:
     - if ('${targetNodes.nodeGroup}'.indexOf('sqldb') > -1):
@@ -197,21 +227,8 @@ actions:
         selfcertgen webadmin ${env.domain} ${targetNodes.nodeGroup};
         chown -R 700:700 ${globals.certFolder} /usr/local/sbin/selfcertgen; chmod 600 ${globals.certFolder}/*
       user: root
-    - cmd[${this.affectedNodes}]: |-
-        rm -rf /var/lib/jelastic/keys/SSL-TLS/client; mkdir -p /var/lib/jelastic/keys/SSL-TLS/client;
-        rm -rf /var/lib/jelastic/keys/SSL-TLS/server; mkdir -p /var/lib/jelastic/keys/SSL-TLS/server;
-        chown -R postgres:postgres /var/lib/jelastic/keys/SSL-TLS/*
-        rm -f /var/lib/jelastic/keys/SSL-TLS/client.csr
-        for i in client.crt client.key
-        do
-            [ -f /var/lib/jelastic/keys/SSL-TLS/${i} ] && mv -f /var/lib/jelastic/keys/SSL-TLS/${i} /var/lib/jelastic/keys/SSL-TLS/client/${i}
-        done
-        for i in root.crt root.key root.srl server.crt server.key
-        do
-            [ -f /var/lib/jelastic/keys/SSL-TLS/${i} ] && mv -f /var/lib/jelastic/keys/SSL-TLS/${i} /var/lib/jelastic/keys/SSL-TLS/server/${i}
-        done
-        ln -sfT /var/lib/jelastic/keys/SSL-TLS/server/root.crt /var/lib/jelastic/keys/SSL-TLS/client/root.crt
-      user: root
+    - moveCertsToDirs:
+        affectedNodes: ${targetNodes.nodeGroup}
       
   getPswd:
     - if ('${targetNodes.nodeGroup}'.indexOf('sqldb') > -1):
