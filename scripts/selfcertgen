@@ -27,7 +27,7 @@ CERT_DIR="/var/lib/jelastic/keys/SSL-TLS";
 [ -z "$KEY_SIZE" ] && export KEY_SIZE=2048
 [ -z "$KEY_HOST" ] && export KEY_HOST=$(hostname)
 [ -z "$KEY_EXPIRE" ] && export KEY_EXPIRE=3650
-[ -n "${1}"] && export PG_USER="${1}"
+[ -n "${1}" ] && export PG_USER="${1}"
 [ -z "$PG_USER" ] && export PG_USER="webadmin"
 
 #generating server key, cert and root cert

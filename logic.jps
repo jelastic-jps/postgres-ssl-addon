@@ -74,13 +74,6 @@ onAfterServiceScaleOut[${targetNodes.nodeGroup}]:
       wget -O /usr/local/sbin/copyCert ${baseUrl}/scripts/copyCert?_r=${fn.random};
       chmod +x /usr/local/sbin/copyCert
       grep -q  "${globals.certFolder}" /etc/jelastic/redeploy.conf || echo "${globals.certFolder}" >> /etc/jelastic/redeploy.conf
-      source /etc/jelastic/metainf.conf
-      if [ "x$COMPUTE_TYPE" == "xmariadb" ] ; then
-          if [ -f "${globals.dbConfigFile}" ]; then
-              grep -q '^[[:space:]]*\[sst\]' ${globals.dbConfigFile} || echo '[sst]' >> ${globals.dbConfigFile}
-              grep -q '^[[:space:]]*ssl-mode=DISABLED' ${globals.dbConfigFile} || sed -ci -e '/\[sst\]/ a\ssl-mode=DISABLED' ${globals.dbConfigFile}
-          fi
-      fi
     user: root
   - getMasterId
   - cmd[${globals.masterId}]: copyCert getCert ${globals.certFolder}/server/root.crt
@@ -161,14 +154,17 @@ actions:
     - forEach(nodes.${targetNodes.nodeGroup}):
       - cmd[${@i.id}]: jem service stop
         user: root
+    - updateUtils
     - cmd[${targetNodes.nodeGroup}]: |-
         mv ${globals.certFolder}/server/root.* ${globals.certFolder}/;
         rm -f ${globals.certFolder}/server/server.*
-        wget -O /usr/local/sbin/selfcertgen ${baseUrl}/scripts/selfcertgen?_r=${fn.random};
-        chmod +x /usr/local/sbin/selfcertgen /usr/local/sbin/copyCert;
-        chown 700:700 /usr/local/sbin/selfcertgen;
         selfcertgen webadmin ${env.domain} ${targetNodes.nodeGroup};
-        mv -f ${globals.certFolder}/client/client.* ${globals.certFolder}/;
+        source /etc/jelastic/metainf.conf;
+        if [ "x$COMPUTE_TYPE" == "xpostgres" ] ; then
+            mv -f ${globals.certFolder}/client/client.* ${globals.certFolder}/;
+        else
+            rm -f ${globals.certFolder}/client.*;
+        fi
       user: root
     - moveCertsToDirs:
         affectedNodes: ${targetNodes.nodeGroup}
@@ -218,17 +214,14 @@ actions:
             message: Database version is not supported.
 
   generateCerts:
+    - updateUtils
     - cmd[${this.affectedNodes}]: |-
-        [ -f /usr/local/sbin/selfcertgen ] && rm -f /usr/local/sbin/selfcertgen;
-        [ -f /usr/local/sbin/copyCert ] && rm -f /usr/local/sbin/copyCert;
-        wget -O /usr/local/sbin/selfcertgen ${baseUrl}/scripts/selfcertgen?_r=${fn.random};
-        wget -O /usr/local/sbin/copyCert ${baseUrl}/scripts/copyCert?_r=${fn.random};
-        chmod +x /usr/local/sbin/selfcertgen /usr/local/sbin/copyCert
         selfcertgen webadmin ${env.domain} ${targetNodes.nodeGroup};
-        chown -R 700:700 ${globals.certFolder} /usr/local/sbin/selfcertgen; chmod 600 ${globals.certFolder}/*
+        chown -R 700:700 ${globals.certFolder}; 
+        chmod 600 ${globals.certFolder}/*
       user: root
     - moveCertsToDirs:
-        affectedNodes: ${targetNodes.nodeGroup}
+        affectedNodes: ${this.affectedNodes}
       
   getPswd:
     - if ('${targetNodes.nodeGroup}'.indexOf('sqldb') > -1):
@@ -343,8 +336,8 @@ actions:
     - cmd[${this.masternode}]: |-
         source /etc/jelastic/metainf.conf
         if [ "x$COMPUTE_TYPE" == "xpostgres" ] ; then
-            [ -f /root/check_app.sh ] && rm -f /root/check_app.sh;
-            wget -O /root/check_app.sh ${baseUrl}/scripts/check_app.sh?_r=${fn.random};
+            wget -O /root/check_app_new.sh ${baseUrl}/scripts/check_app.sh?_r=${fn.random} && \
+            mv /root/check_app_new.sh /root/check_app.sh && \
             bash /root/check_app.sh;
         fi
       user: root
@@ -370,3 +363,13 @@ actions:
         affectedNodes: ${this.nodesToEnableSSL}
     - enableSSL:
         affectedNodes: ${this.nodesToEnableSSL}
+
+  updateUtils:
+    - cmd[${targetNodes.nodeGroup}]: |-
+        wget -O /usr/local/sbin/selfcertgen_new ${baseUrl}/scripts/selfcertgen?_r=${fn.random} && \
+        wget -O /usr/local/sbin/copyCert_new ${baseUrl}/scripts/copyCert?_r=${fn.random} && \
+        mv -f /usr/local/sbin/selfcertgen_new /usr/local/sbin/selfcertgen && \
+        mv -f /usr/local/sbin/copyCert_new /usr/local/sbin/copyCert && \
+        chmod +x /usr/local/sbin/selfcertgen /usr/local/sbin/copyCert && \
+        chown -R 700:700 /usr/local/sbin/selfcertgen
+      user: root
