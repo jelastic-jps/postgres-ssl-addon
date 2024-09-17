@@ -7,7 +7,7 @@ logo: /images/postgres-ssl-logo.svg
 categories:
   - apps/dev-and-admin-tools
 description: Enforce DB Connection to use SSL/TLS in Postgres cluster/standalone. Certificate folder /var/lib/jelastic/keys/SSL-TLS.
-baseUrl: https://raw.githubusercontent.com/DmytroZubelevych/postgres-ssl-addon-1/main
+baseUrl: https://raw.githubusercontent.com/jelastic-jps/postgres-ssl-addon/main
 
 targetNodes:
   nodeType:
