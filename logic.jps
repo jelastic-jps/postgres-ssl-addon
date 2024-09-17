@@ -5,7 +5,7 @@ id: postgres-ssl
 targetEditions: any
 logo: /images/postgres-ssl-logo.svg
 description: Enforce DB Connection to use SSL/TLS. Certificate folder /var/lib/jelastic/keys/SSL-TLS
-baseUrl: https://raw.githubusercontent.com/jelastic-jps/postgres-ssl-addon/main
+baseUrl: https://raw.githubusercontent.com/DmytroZubelevych/postgres-ssl-addon-1/main
 
 targetNodes:
   nodeType:
@@ -74,13 +74,6 @@ onAfterServiceScaleOut[${targetNodes.nodeGroup}]:
       wget -O /usr/local/sbin/copyCert ${baseUrl}/scripts/copyCert?_r=${fn.random};
       chmod +x /usr/local/sbin/copyCert
       grep -q  "${globals.certFolder}" /etc/jelastic/redeploy.conf || echo "${globals.certFolder}" >> /etc/jelastic/redeploy.conf
-      source /etc/jelastic/metainf.conf
-      if [ "x$COMPUTE_TYPE" == "xmariadb" ] ; then
-          if [ -f "${globals.dbConfigFile}" ]; then
-              grep -q '^[[:space:]]*\[sst\]' ${globals.dbConfigFile} || echo '[sst]' >> ${globals.dbConfigFile}
-              grep -q '^[[:space:]]*ssl-mode=DISABLED' ${globals.dbConfigFile} || sed -ci -e '/\[sst\]/ a\ssl-mode=DISABLED' ${globals.dbConfigFile}
-          fi
-      fi
     user: root
   - getMasterId
   - cmd[${globals.masterId}]: copyCert getCert ${globals.certFolder}/server/root.crt
@@ -115,15 +108,21 @@ onAfterClone:
         envName: ${settings.envName}
 
 buttons:
-  - confirmText: Do you want to reissue the SSL certificates and key (service restart needed)?
-    loadingText: Reissuing the certificates...
+  - confirmText: Do you want to reissue the SSL certificates (root, server and client) and keys (root, server and client)? Service restart will be done.
+    loadingText: Reissuing all certificates and keys...
     action: reGenerateCerts
-    caption: Re-issue certificates
-    successText: Certificates reissued successfully
-  - loadingText: Opening...
-    action: opendocs
-    caption: Configuration Tutorial
-    href: https://www.virtuozzo.com/application-platform-docs/ssl-for-pgsql/
+    caption: Renew all certs
+    successText: All the certificates and keys are reissued successfully
+  - confirmText: Do you want to reissue the SSL certificates and key (only server, root and client are not renewed)? Service restart will be done.
+    loadingText: Reissuing the certificates...
+    action: reGenerateServerCerts
+    caption: Renew server certs
+    successText: Server certificates and keys are reissued successfully
+  - confirmText: Do you want to reissue the SSL certificates and key (only client, root and server are not renewed)? Service restart will be done. (Client certificate term of validity is 1 year)
+    loadingText: Reissuing the certificates...
+    action: reGenerateClientCerts
+    caption: Renew client certs
+    successText: Client certificates and keys are reissued successfully
 
 actions:
   getMasterId:
@@ -141,11 +140,69 @@ actions:
       user: root
 
   reGenerateCerts:
-    - cmd[${targetNodes.nodeGroup}]: rm -rf /var/lib/jelastic/keys/SSL-TLS/*;
+    - forEach(nodes.${targetNodes.nodeGroup}):
+      - cmd[${@i.id}]: jem service stop 
+    - cmd[${targetNodes.nodeGroup}]: |-
+        rm -rf ${globals.certFolder}/*;
+      user: root
     - generateCerts:
         affectedNodes: ${targetNodes.nodeGroup}
-    - cmd[${targetNodes.nodeGroup}]: jem service restart
-    - fixCertOwnPerm
+    - forEach(nodes.${targetNodes.nodeGroup}):
+      - cmd[${@i.id}]: jem service start
+
+  reGenerateServerCerts:
+    - forEach(nodes.${targetNodes.nodeGroup}):
+      - cmd[${@i.id}]: jem service stop
+        user: root
+    - updateUtils
+    - cmd[${targetNodes.nodeGroup}]: |-
+        mv ${globals.certFolder}/server/root.* ${globals.certFolder}/;
+        rm -f ${globals.certFolder}/server/server.*
+        selfcertgen webadmin ${env.domain} ${targetNodes.nodeGroup};
+        source /etc/jelastic/metainf.conf;
+        if [ "x$COMPUTE_TYPE" == "xpostgres" ] ; then
+            mv -f ${globals.certFolder}/client/client.* ${globals.certFolder}/;
+        else
+            rm -f ${globals.certFolder}/client.*;
+        fi
+      user: root
+    - moveCertsToDirs:
+        affectedNodes: ${targetNodes.nodeGroup}
+    - cmd[${@i.id}]: jem service start
+      user: root
+
+  reGenerateClientCerts:
+    - if ('${targetNodes.nodeGroup}'.indexOf('pgpool') > -1):
+        stopEvent:
+          type: warning
+          message: Generation of client SSL/TLS certificates is not supported for Pgpool-II nodes. 
+    - forEach(nodes.${targetNodes.nodeGroup}):
+      - cmd[${@i.id}]: jem service stop
+        user: root
+    - cmd[${targetNodes.nodeGroup}]: |-
+        mv -f ${globals.certFolder}/server/* ${globals.certFolder}/;
+    - generateCerts:
+        affectedNodes: ${targetNodes.nodeGroup}
+    - cmd[${@i.id}]: jem service start
+      user: root
+
+  moveCertsToDirs:
+    - cmd[${this.affectedNodes}]: |-
+        rm -rf ${globals.certFolder}/client; mkdir -p ${globals.certFolder}/client;
+        rm -rf ${globals.certFolder}/server; mkdir -p ${globals.certFolder}/server;
+        chown -R 700:700 ${globals.certFolder}/*
+        rm -f ${globals.certFolder}/client.csr ${globals.certFolder}/server.csr ${globals.certFolder}/client-req.pem ${globals.certFolder}/server-req.pem
+        rm -f ${globals.certFolder}/{server.srl,client.csr}
+        for i in root.crt root.key server.crt server.key root.srl
+        do
+            [ -f ${globals.certFolder}/${i} ] && mv -f ${globals.certFolder}/${i} ${globals.certFolder}/server/${i}
+        done
+        for i in client.crt client.key
+        do
+            [ -f ${globals.certFolder}/${i} ] && mv -f ${globals.certFolder}/${i} ${globals.certFolder}/client/${i}
+        done
+        ln -sfT ${globals.certFolder}/server/root.crt ${globals.certFolder}/client/root.crt
+      user: root
 
   checkApplication:
     - if ('${targetNodes.nodeGroup}'.indexOf('sqldb') > -1):
@@ -157,7 +214,9 @@ actions:
             message: Database version is not supported.
 
   generateCerts:
+    - updateUtils
     - cmd[${this.affectedNodes}]: |-
+
         [ -f /usr/local/sbin/selfcertgen ] && rm -f /usr/local/sbin/selfcertgen;
         [ -f /usr/local/sbin/copyCert ] && rm -f /usr/local/sbin/copyCert;
         wget -O /usr/local/sbin/selfcertgen ${baseUrl}/scripts/selfcertgen?_r=${fn.random};
@@ -181,6 +240,8 @@ actions:
         done
         ln -sfT /var/lib/jelastic/keys/SSL-TLS/server/root.crt /var/lib/jelastic/keys/SSL-TLS/client/root.crt
       user: root
+    - moveCertsToDirs:
+        affectedNodes: ${this.affectedNodes}
       
   getPswd:
     - if ('${targetNodes.nodeGroup}'.indexOf('sqldb') > -1):
@@ -295,8 +356,8 @@ actions:
     - cmd[${this.masternode}]: |-
         source /etc/jelastic/metainf.conf
         if [ "x$COMPUTE_TYPE" == "xpostgres" ] ; then
-            [ -f /root/check_app.sh ] && rm -f /root/check_app.sh;
-            wget -O /root/check_app.sh ${baseUrl}/scripts/check_app.sh?_r=${fn.random};
+            wget -O /root/check_app_new.sh ${baseUrl}/scripts/check_app.sh?_r=${fn.random} && \
+            mv /root/check_app_new.sh /root/check_app.sh && \
             bash /root/check_app.sh;
         fi
       user: root
@@ -322,3 +383,13 @@ actions:
         affectedNodes: ${this.nodesToEnableSSL}
     - enableSSL:
         affectedNodes: ${this.nodesToEnableSSL}
+
+  updateUtils:
+    - cmd[${targetNodes.nodeGroup}]: |-
+        wget -O /usr/local/sbin/selfcertgen_new ${baseUrl}/scripts/selfcertgen?_r=${fn.random} && \
+        wget -O /usr/local/sbin/copyCert_new ${baseUrl}/scripts/copyCert?_r=${fn.random} && \
+        mv -f /usr/local/sbin/selfcertgen_new /usr/local/sbin/selfcertgen && \
+        mv -f /usr/local/sbin/copyCert_new /usr/local/sbin/copyCert && \
+        chmod +x /usr/local/sbin/selfcertgen /usr/local/sbin/copyCert && \
+        chown -R 700:700 /usr/local/sbin/selfcertgen
+      user: root
