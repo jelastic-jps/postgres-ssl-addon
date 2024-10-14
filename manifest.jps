@@ -12,7 +12,6 @@ baseUrl: https://raw.githubusercontent.com/jelastic-jps/postgres-ssl-addon/main
 targetNodes:
   nodeType:
     - postgresql
-    - postgres11
     - postgres12
     - postgres13
     - postgres14
