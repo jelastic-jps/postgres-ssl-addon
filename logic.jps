@@ -225,21 +225,6 @@ actions:
         selfcertgen webadmin ${env.domain} ${targetNodes.nodeGroup};
         chown -R 700:700 ${globals.certFolder} /usr/local/sbin/selfcertgen; chmod 600 ${globals.certFolder}/*
       user: root
-    - cmd[${this.affectedNodes}]: |-
-        rm -rf /var/lib/jelastic/keys/SSL-TLS/client; mkdir -p /var/lib/jelastic/keys/SSL-TLS/client;
-        rm -rf /var/lib/jelastic/keys/SSL-TLS/server; mkdir -p /var/lib/jelastic/keys/SSL-TLS/server;
-        chown -R postgres:postgres /var/lib/jelastic/keys/SSL-TLS/*
-        rm -f /var/lib/jelastic/keys/SSL-TLS/client.csr
-        for i in client.crt client.key
-        do
-            [ -f /var/lib/jelastic/keys/SSL-TLS/${i} ] && mv -f /var/lib/jelastic/keys/SSL-TLS/${i} /var/lib/jelastic/keys/SSL-TLS/client/${i}
-        done
-        for i in root.crt root.key root.srl server.crt server.key
-        do
-            [ -f /var/lib/jelastic/keys/SSL-TLS/${i} ] && mv -f /var/lib/jelastic/keys/SSL-TLS/${i} /var/lib/jelastic/keys/SSL-TLS/server/${i}
-        done
-        ln -sfT /var/lib/jelastic/keys/SSL-TLS/server/root.crt /var/lib/jelastic/keys/SSL-TLS/client/root.crt
-      user: root
     - moveCertsToDirs:
         affectedNodes: ${this.affectedNodes}
       
