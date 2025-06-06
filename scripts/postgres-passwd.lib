@@ -131,4 +131,3 @@ function setPassword() {
         $SED -i '/local/s/trust/md5/' $POSTGRES_CONF
         startService ${SERVICE} >> $LOG_FILE 2>&1
 }
-
