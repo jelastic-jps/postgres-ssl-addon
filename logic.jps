@@ -5,7 +5,7 @@ id: postgres-ssl
 targetEditions: any
 logo: /images/postgres-ssl-logo.svg
 description: Enforce DB Connection to use SSL/TLS. Certificate folder /var/lib/jelastic/keys/SSL-TLS
-baseUrl: https://raw.githubusercontent.com/jelastic-jps/postgres-ssl-addon/main
+baseUrl: https://cdn.jsdelivr.net/gh/jelastic-jps/postgres-ssl-addon@main
 
 targetNodes:
   nodeType:
