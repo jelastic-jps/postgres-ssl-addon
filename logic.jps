@@ -15,6 +15,11 @@ targetNodes:
     - postgres13
     - postgres14
     - postgres15
+    - postgres16
+    - postgres17
+    - postgres18
+    - postgres19
+    - postgres20
     - pgpool2
     - pgpool2-4
 
